@@ -166,7 +166,7 @@ export default function Results() {
             <div className="card mb-2">
               <div className="card-header">
                 <h2>{tab==="frostCreek"?"Singles":"Best Ball"} Results</h2>
-                <span className="badge">{tab==="frostCreek"?"6 pts ea":"3 pts ea"}</span>
+                <span className="badge">{tab==="frostCreek"?"6 matches · 1 pt ea":"3 matches · 1 pt ea"}</span>
               </div>
               <div className="card-body">
                 {matchResults.map((m,mi)=>{

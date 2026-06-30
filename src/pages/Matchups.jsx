@@ -83,7 +83,7 @@ export default function Matchups({ onSave }) {
       <div className="card mb-2">
         <div className="card-header">
           <h2>{isSingles?"Singles Matches":"Best Ball Pairings"} — {course.name}</h2>
-          <span className="badge">{isSingles?"6 Pts Each":"3 Pts Each"}</span>
+          <span className="badge">{isSingles?"6 Matches · 1 Pt Each":"3 Matches · 1 Pt Each"}</span>
         </div>
         <div className="card-body">
           {matches.map((m,mi) => {

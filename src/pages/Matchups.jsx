@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { COURSES, COURSE_KEYS } from "../lib/gameData";
+import { COURSES, COURSE_KEYS, courseHandicap } from "../lib/gameData";
 import { getMatchups, saveMatchup } from "../lib/supabase";
 import { useAppData } from "../lib/useAppData";
 
@@ -35,6 +35,7 @@ export default function Matchups({ onSave }) {
     load();
   }, [courseKey]);
 
+  const course = COURSES[courseKey];
   const team1Players = players.filter(p=>p.team===1);
   const team2Players = players.filter(p=>p.team===2);
 
@@ -48,19 +49,6 @@ export default function Matchups({ onSave }) {
     setSaved(false);
   }
 
-  // Collect all assigned player ids except current slot
-  function getUsed(matchIdx, side, slotIdx) {
-    const used = new Set();
-    matches.forEach((m,mi) => {
-      [...(m.team1||[]), ...(m.team2||[])].forEach((id, si) => {
-        if (!id) return;
-        const isCurrent = mi===matchIdx && ((side==="team1" && m.team1?.[slotIdx]===id && si===slotIdx) || (side==="team2" && m.team2?.[slotIdx]===id && si===slotIdx));
-        if (!isCurrent) used.add(id);
-      });
-    });
-    return used;
-  }
-
   async function handleSave() {
     setSaving(true);
     for (const m of matches) await saveMatchup(courseKey, m.index, m.team1, m.team2);
@@ -69,7 +57,6 @@ export default function Matchups({ onSave }) {
   }
 
   const isSingles = courseKey === "frostCreek";
-  const course = COURSES[courseKey];
 
   return (
     <div>
@@ -83,6 +70,11 @@ export default function Matchups({ onSave }) {
                   <option key={ck} value={ck}>{COURSES[ck].name} — {COURSES[ck].day}</option>
                 ))}
               </select>
+            </div>
+            <div style={{flex:1,display:"flex",alignItems:"flex-end"}}>
+              <span style={{fontSize:"0.8rem",color:"var(--gray-400)",paddingBottom:"0.45rem"}}>
+                {course.tees} Tees · Rating {course.rating} · Slope {course.slope}
+              </span>
             </div>
           </div>
         </div>
@@ -114,11 +106,14 @@ export default function Matchups({ onSave }) {
                       <select key={si} className="form-select" value={pid||""}
                         onChange={e=>setSlot(mi,"team1",si,e.target.value)}>
                         <option value="">— Select player —</option>
-                        {team1Players.map(p=>(
-                          <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>
-                            {p.name} (GHIN {(ghinOverrides[p.id]??p.ghin).toFixed(1)})
-                          </option>
-                        ))}
+                        {team1Players.map(p=>{
+                          const ch = courseHandicap(ghinOverrides[p.id]??p.ghin, course.slope);
+                          return (
+                            <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>
+                              {p.name} (CH {ch})
+                            </option>
+                          );
+                        })}
                       </select>
                     ))}
                   </div>
@@ -130,11 +125,14 @@ export default function Matchups({ onSave }) {
                       <select key={si} className="form-select" value={pid||""}
                         onChange={e=>setSlot(mi,"team2",si,e.target.value)}>
                         <option value="">— Select player —</option>
-                        {team2Players.map(p=>(
-                          <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>
-                            {p.name} (GHIN {(ghinOverrides[p.id]??p.ghin).toFixed(1)})
-                          </option>
-                        ))}
+                        {team2Players.map(p=>{
+                          const ch = courseHandicap(ghinOverrides[p.id]??p.ghin, course.slope);
+                          return (
+                            <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>
+                              {p.name} (CH {ch})
+                            </option>
+                          );
+                        })}
                       </select>
                     ))}
                   </div>
@@ -148,30 +146,6 @@ export default function Matchups({ onSave }) {
             </button>
             {saved && <span className="text-muted">Matchups saved</span>}
           </div>
-        </div>
-      </div>
-
-      {/* Handicap Reference */}
-      <div className="card">
-        <div className="card-header"><h2>Handicap Reference</h2><span className="badge">{course.name}</span></div>
-        <div className="card-body" style={{padding:0}}>
-          <table className="leaderboard">
-            <thead><tr><th>Player</th><th>Team</th><th>GHIN</th><th>Course Hdcp</th></tr></thead>
-            <tbody>
-              {players.map(p => {
-                const ghin = ghinOverrides[p.id]??p.ghin;
-                const ch = Math.round(ghin * (course.slope/113));
-                return (
-                  <tr key={p.id}>
-                    <td style={{fontWeight:600}}>{p.name}</td>
-                    <td><span className={`tag tag-team${p.team}`}>{teams[p.team]?.name}</span></td>
-                    <td className="text-mono">{ghin}</td>
-                    <td className="text-mono" style={{fontWeight:700}}>{ch}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
         </div>
       </div>
     </div>

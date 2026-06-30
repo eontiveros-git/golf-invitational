@@ -189,9 +189,13 @@ export default function Results() {
                   return (
                     <div key={mi} className="match-card">
                       <div className="match-card-header">
-                        <span style={{fontWeight:700}}>{t1.map(pName).join(" / ")}</span>
+                        <span style={{fontWeight:700,color: isSingles ? (players.find(p=>p.id===t1[0])?.team===1?"var(--green-mid)":"var(--blue)") : "var(--green-mid)"}}>
+                          {t1.map(pName).join(" / ")}
+                        </span>
                         <span className="match-vs">vs</span>
-                        <span style={{fontWeight:700}}>{t2.map(pName).join(" / ")}</span>
+                        <span style={{fontWeight:700,color: isSingles ? (players.find(p=>p.id===t2[0])?.team===1?"var(--green-mid)":"var(--blue)") : "var(--blue)"}}>
+                          {t2.map(pName).join(" / ")}
+                        </span>
                         <span className={`match-result-badge ${badgeCls}`}>{badgeTxt}</span>
                       </div>
                       {res && (
@@ -213,8 +217,9 @@ export default function Results() {
                             ))}
                           </div>
                           {!isSingles && res.holeWins && (
-                            <div style={{marginTop:"0.4rem",fontSize:"0.75rem",color:"var(--gray-600)"}}>
-                              Holes won: {teams[1].name} {res.holeWins.team1} – {res.holeWins.team2} {teams[2].name}
+                            <div style={{marginTop:"0.4rem",fontSize:"0.78rem",display:"flex",flexDirection:"column",gap:"0.1rem"}}>
+                              <span style={{color:"var(--green-mid)",fontWeight:600}}>{teams[1].name} {res.holeWins.team1}</span>
+                              <span style={{color:"var(--blue)",fontWeight:600}}>{teams[2].name} {res.holeWins.team2}</span>
                             </div>
                           )}
                         </div>

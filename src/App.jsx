@@ -3,20 +3,22 @@ import Dashboard from "./pages/Dashboard";
 import ScoreEntry from "./pages/ScoreEntry";
 import Matchups from "./pages/Matchups";
 import Results from "./pages/Results";
-import Settings from "./pages/Settings";
-import Export from "./pages/Export";
+import Settlement from "./pages/Settlement";
 import Champions from "./pages/Champions";
+import Export from "./pages/Export";
+import Settings from "./pages/Settings";
 import { TOURNAMENT } from "./lib/gameData";
 import "./index.css";
 
 const TABS = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "scores",    label: "Enter Scores" },
-  { id: "matchups",  label: "Matchups" },
-  { id: "results",   label: "Results" },
-  { id: "champions", label: "Champions" },
-  { id: "export",    label: "Export" },
-  { id: "settings",  label: "Settings" },
+  { id: "dashboard",  label: "Dashboard" },
+  { id: "scores",     label: "Enter Scores" },
+  { id: "matchups",   label: "Matchups" },
+  { id: "results",    label: "Results" },
+  { id: "settlement", label: "Settlement" },
+  { id: "champions",  label: "Champions" },
+  { id: "export",     label: "Export" },
+  { id: "settings",   label: "Settings" },
 ];
 
 export default function App() {
@@ -32,7 +34,6 @@ export default function App() {
           <div className="top-bar-sub">{TOURNAMENT.edition} · {TOURNAMENT.location} · {TOURNAMENT.dates}</div>
         </div>
       </header>
-
       <nav className="nav-tabs">
         {TABS.map(t => (
           <button key={t.id} className={`nav-tab${tab===t.id?" active":""}`} onClick={()=>setTab(t.id)}>
@@ -40,15 +41,15 @@ export default function App() {
           </button>
         ))}
       </nav>
-
       <main className="page">
-        {tab==="dashboard" && <Dashboard key={refresh} />}
-        {tab==="scores"    && <ScoreEntry onSave={bump} />}
-        {tab==="matchups"  && <Matchups onSave={bump} />}
-        {tab==="results"   && <Results key={refresh} />}
-        {tab==="champions" && <Champions key={refresh} onSave={bump} />}
-        {tab==="export"    && <Export />}
-        {tab==="settings"  && <Settings onSave={bump} />}
+        {tab==="dashboard"  && <Dashboard  key={refresh} />}
+        {tab==="scores"     && <ScoreEntry onSave={bump} />}
+        {tab==="matchups"   && <Matchups   onSave={bump} />}
+        {tab==="results"    && <Results    key={refresh} />}
+        {tab==="settlement" && <Settlement key={refresh} />}
+        {tab==="champions"  && <Champions  key={refresh} onSave={bump} />}
+        {tab==="export"     && <Export />}
+        {tab==="settings"   && <Settings   onSave={bump} />}
       </main>
     </div>
   );

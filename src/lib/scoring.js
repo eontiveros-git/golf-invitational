@@ -59,12 +59,13 @@ export function dailyLowNet(courseKey, roundsForCourse, ghinOverrides = {}) {
   const second = secondNet !== undefined ? remaining.filter(r => r.net === secondNet) : [];
   const payouts = {};
   PLAYERS.forEach(p => (payouts[p.id] = 0));
-  first.forEach(r => (payouts[r.playerId] += 80/first.length));
+  first.forEach(r  => (payouts[r.playerId] += 80/first.length));
   second.forEach(r => (payouts[r.playerId] += 40/second.length));
   return { first, second, payouts };
 }
 
-// Best ball match: handicaps adjusted to lowest in the foursome (all 4 players)
+// Best ball: each match worth 1 RC point (win=1, halved=0.5 each, loss=0)
+// "(3 Points)" in itinerary = 3 matches per day × 1 pt each = 3 pts available per day
 export function calcBestBall(courseKey, team1Ids, team2Ids, roundsMap, ghinOverrides = {}) {
   const course = COURSES[courseKey];
   const pmap = playerMap(ghinOverrides);
@@ -86,14 +87,16 @@ export function calcBestBall(courseKey, team1Ids, team2Ids, roundsMap, ghinOverr
     else                       { winner="half"; t1Pts+=0.5; t2Pts+=0.5; }
     holes.push({ hole:h+1, t1Best, t2Best, winner });
   }
+  // 1 RC point per match
   let rc1=0, rc2=0;
-  if (t1Pts > t2Pts)      { rc1=3; rc2=0; }
-  else if (t2Pts > t1Pts) { rc1=0; rc2=3; }
-  else                     { rc1=1.5; rc2=1.5; }
+  if (t1Pts > t2Pts)      { rc1=1; rc2=0; }
+  else if (t2Pts > t1Pts) { rc1=0; rc2=1; }
+  else                     { rc1=0.5; rc2=0.5; }
   return { holes, holeWins:{team1:t1Pts, team2:t2Pts}, rcPoints:{team1:rc1, team2:rc2} };
 }
 
-// Singles match: handicap to lowest of the two
+// Singles: each match worth 1 RC point
+// "(6 Points)" = 6 singles matches × 1 pt each = 6 pts available Sunday
 export function calcSingles(courseKey, p1Id, p2Id, roundsMap, ghinOverrides = {}) {
   const course = COURSES[courseKey];
   const pmap = playerMap(ghinOverrides);
@@ -114,10 +117,11 @@ export function calcSingles(courseKey, p1Id, p2Id, roundsMap, ghinOverrides = {}
     else               { winner="half"; p1Pts+=0.5; p2Pts+=0.5; }
     holes.push({ hole:h+1, n1, n2, winner });
   }
+  // 1 RC point per match
   let rc1=0, rc2=0;
-  if (p1Pts > p2Pts)      { rc1=6; rc2=0; }
-  else if (p2Pts > p1Pts) { rc1=0; rc2=6; }
-  else                     { rc1=3; rc2=3; }
+  if (p1Pts > p2Pts)      { rc1=1; rc2=0; }
+  else if (p2Pts > p1Pts) { rc1=0; rc2=1; }
+  else                     { rc1=0.5; rc2=0.5; }
   return { holes, holeWins:{[p1Id]:p1Pts,[p2Id]:p2Pts}, rcPoints:{[p1Id]:rc1,[p2Id]:rc2} };
 }
 
@@ -132,4 +136,123 @@ export function overallStandings(rounds, ghinOverrides = {}) {
     standings[r.player_id].rounds++;
   });
   return Object.values(standings);
+}
+
+// ── SETTLEMENT CALCULATION ────────────────────────────────────────────────
+// Every player pays equal shares into each pot each day.
+// Their "balance" = winnings - buy-ins. Settlement finds the minimum
+// number of transactions to zero everyone out using a greedy creditor/debtor match.
+
+export function calcSettlement(rounds, matchups, ctpWinners, ghinOverrides, roundsByCourse, grossByCoursePlayer, players) {
+  const COURSE_KEYS = ["bearDance","redSky","lakota","frostCreek"];
+
+  // balance[playerId] = net position (+ = owed money, - = owes money)
+  const balance = {};
+  players.forEach(p => (balance[p.id] = 0));
+
+  // Daily buy-ins per player per course:
+  //   $20 skins + $10 daily low net + $5 CTP = $35/day
+  // Ryder Cup: $50 flat (one time)
+  // MVP: $10 flat (one time)
+  const dailyBuyIn = 35; // skins $20 + low net $10 + CTP $5
+  const rcBuyIn    = 50;
+  const mvpBuyIn   = 10;
+
+  // Deduct buy-ins for each round played
+  COURSE_KEYS.forEach(ck => {
+    const cr = roundsByCourse[ck] || [];
+    if (!cr.length) return;
+    cr.forEach(r => { balance[r.playerId] -= dailyBuyIn; });
+  });
+
+  // Deduct Ryder Cup + MVP from everyone (paid regardless of rounds played)
+  players.forEach(p => { balance[p.id] -= (rcBuyIn + mvpBuyIn); });
+
+  // Add skins winnings
+  COURSE_KEYS.forEach(ck => {
+    const cr = roundsByCourse[ck] || [];
+    if (!cr.length) return;
+    const { totals } = skinPayouts(ck, cr, ghinOverrides);
+    players.forEach(p => { balance[p.id] += (totals[p.id]||0); });
+  });
+
+  // Add daily low net winnings
+  COURSE_KEYS.forEach(ck => {
+    const cr = roundsByCourse[ck] || [];
+    if (!cr.length) return;
+    const { payouts } = dailyLowNet(ck, cr, ghinOverrides);
+    players.forEach(p => { balance[p.id] += (payouts[p.id]||0); });
+  });
+
+  // Add CTP winnings — each par 3 pot = $60 (12 × $5)
+  // Count total par 3s across played courses for carryover tracking
+  // Simple: each CTP win = $60
+  ctpWinners.forEach(c => {
+    if (balance[c.player_id] !== undefined) balance[c.player_id] += 60;
+  });
+
+  // Ryder Cup winner: winning team splits $600
+  let rc1=0, rc2=0;
+  matchups.forEach(m => {
+    const gMap = grossByCoursePlayer[m.course_key]||{};
+    const isSingles = m.course_key==="frostCreek";
+    const t1=m.team1_players||[], t2=m.team2_players||[];
+    if (isSingles && t1[0]&&t2[0]&&gMap[t1[0]]&&gMap[t2[0]]) {
+      const r=calcSingles(m.course_key,t1[0],t2[0],gMap,ghinOverrides);
+      rc1+=(r.rcPoints[t1[0]]||0); rc2+=(r.rcPoints[t2[0]]||0);
+    } else if (!isSingles&&t1.length===2&&t2.length===2&&(t1.some(id=>gMap[id])||t2.some(id=>gMap[id]))) {
+      const r=calcBestBall(m.course_key,t1,t2,gMap,ghinOverrides);
+      rc1+=r.rcPoints.team1; rc2+=r.rcPoints.team2;
+    }
+  });
+  const rcWinner = rc1>rc2?1:rc2>rc1?2:null;
+  if (rcWinner) {
+    const winners = players.filter(p=>p.team===rcWinner);
+    winners.forEach(p => { balance[p.id] += 600/winners.length; });
+  }
+
+  // MVP: player with most RC points wins $120
+  const mvpPts = {};
+  players.forEach(p=>(mvpPts[p.id]=0));
+  matchups.forEach(m => {
+    const gMap=grossByCoursePlayer[m.course_key]||{};
+    const isSingles=m.course_key==="frostCreek";
+    const t1=m.team1_players||[], t2=m.team2_players||[];
+    if (isSingles&&t1[0]&&t2[0]&&gMap[t1[0]]&&gMap[t2[0]]) {
+      const r=calcSingles(m.course_key,t1[0],t2[0],gMap,ghinOverrides);
+      [t1[0],t2[0]].forEach(id=>{mvpPts[id]+=(r.rcPoints[id]||0);});
+    } else if (!isSingles&&t1.length===2&&t2.length===2&&(t1.some(id=>gMap[id])||t2.some(id=>gMap[id]))) {
+      const r=calcBestBall(m.course_key,t1,t2,gMap,ghinOverrides);
+      t1.forEach(id=>{mvpPts[id]+=r.rcPoints.team1/2;});
+      t2.forEach(id=>{mvpPts[id]+=r.rcPoints.team2/2;});
+    }
+  });
+  const maxMvp = Math.max(...Object.values(mvpPts));
+  if (maxMvp > 0) {
+    const mvpWinners = players.filter(p=>mvpPts[p.id]===maxMvp);
+    mvpWinners.forEach(p=>{ balance[p.id] += 120/mvpWinners.length; });
+  }
+
+  // Greedy settlement: match biggest debtor with biggest creditor
+  const transactions = [];
+  const bal = Object.entries(balance).map(([id,amt])=>({ id, amt: Math.round(amt*100)/100 }));
+
+  let debtors   = bal.filter(b=>b.amt<-0.01).sort((a,b)=>a.amt-b.amt);   // most negative first
+  let creditors = bal.filter(b=>b.amt> 0.01).sort((a,b)=>b.amt-a.amt);   // most positive first
+
+  while (debtors.length && creditors.length) {
+    const debtor   = debtors[0];
+    const creditor = creditors[0];
+    const amount   = Math.min(Math.abs(debtor.amt), creditor.amt);
+    const rounded  = Math.round(amount*100)/100;
+    if (rounded > 0.01) {
+      transactions.push({ from: debtor.id, to: creditor.id, amount: rounded });
+    }
+    debtor.amt   += amount;
+    creditor.amt -= amount;
+    if (Math.abs(debtor.amt)   < 0.01) debtors.shift();
+    if (Math.abs(creditor.amt) < 0.01) creditors.shift();
+  }
+
+  return { balance, transactions };
 }

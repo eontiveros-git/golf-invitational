@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAppData } from "../lib/useAppData";
 import { COURSES, COURSE_KEYS } from "../lib/gameData";
 import { overallStandings, skinPayouts, dailyLowNet, calcBestBall, calcSingles } from "../lib/scoring";
@@ -6,6 +7,7 @@ function fmtMoney(n) { return n <= 0 ? "—" : `$${Math.round(n)}`; }
 
 export default function Dashboard() {
   const { rounds, matchups, ctpWinners, loading, ghinOverrides, roundsByCourse, grossByCoursePlayer, teams, players } = useAppData();
+  const [sortBy, setSortBy] = useState("net"); // "net" | "gross"
 
   if (loading) return <div className="spinner" />;
 
@@ -29,7 +31,7 @@ export default function Dashboard() {
   // ── Overall standings ─────────────────────────────────────────────────
   const standings = overallStandings(rounds, ghinOverrides)
     .filter(s => s.rounds > 0)
-    .sort((a,b) => a.totalNet - b.totalNet);
+    .sort((a,b) => sortBy === "gross" ? a.totalGross - b.totalGross : a.totalNet - b.totalNet);
 
   // ── Daily money breakdown ─────────────────────────────────────────────
   const dailyMoney = {};
@@ -105,7 +107,24 @@ export default function Dashboard() {
               <p className="text-muted" style={{padding:"1rem"}}>No scores entered yet.</p>
             ) : (
               <table className="leaderboard">
-                <thead><tr><th>#</th><th>Player</th><th>Team</th><th>Gross</th><th>Net</th><th>Rnds</th></tr></thead>
+                <thead><tr>
+                  <th>#</th><th>Player</th><th>Team</th>
+                  <th
+                    onClick={()=>setSortBy("gross")}
+                    style={{cursor:"pointer", color: sortBy==="gross" ? "var(--gold)" : undefined}}
+                    title="Sort by Gross"
+                  >
+                    Gross{sortBy==="gross" ? " ▾" : ""}
+                  </th>
+                  <th
+                    onClick={()=>setSortBy("net")}
+                    style={{cursor:"pointer", color: sortBy==="net" ? "var(--gold)" : undefined}}
+                    title="Sort by Net"
+                  >
+                    Net{sortBy==="net" ? " ▾" : ""}
+                  </th>
+                  <th>Rnds</th>
+                </tr></thead>
                 <tbody>
                   {standings.map((s,i) => {
                     const p = players.find(x=>x.id===s.playerId);
@@ -114,8 +133,8 @@ export default function Dashboard() {
                         <td className="text-mono">{i+1}</td>
                         <td style={{fontWeight:600}}>{p?.name}</td>
                         <td><span className={`tag tag-team${p?.team}`}>{teams[p?.team]?.name}</span></td>
-                        <td className="text-mono">{s.totalGross}</td>
-                        <td className="text-mono" style={{fontWeight:700}}>{s.totalNet}</td>
+                        <td className="text-mono" style={{fontWeight: sortBy==="gross"?700:400}}>{s.totalGross}</td>
+                        <td className="text-mono" style={{fontWeight: sortBy==="net"?700:400}}>{s.totalNet}</td>
                         <td className="text-mono">{s.rounds}</td>
                       </tr>
                     );

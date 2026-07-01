@@ -175,15 +175,16 @@ export default function Results() {
                   const t1=m.team1_players||[], t2=m.team2_players||[];
                   let badgeCls="pending", badgeTxt="Pending";
                   if (res) {
+                    const mp = res.matchPlay;
                     if (isSingles) {
                       const rc1=res.rcPoints[t1[0]], rc2=res.rcPoints[t2[0]];
-                      if (rc1>rc2)      { badgeCls="win1"; badgeTxt=`${pName(t1[0])} wins`; }
-                      else if (rc2>rc1) { badgeCls="win2"; badgeTxt=`${pName(t2[0])} wins`; }
-                      else              { badgeCls="halved"; badgeTxt="Halved"; }
+                      if (rc1>rc2)      { badgeCls="win1"; badgeTxt = mp?.isFinal ? `${pName(t1[0])} wins ${mp.label}` : `${pName(t1[0])} ${mp?.label||""}`; }
+                      else if (rc2>rc1) { badgeCls="win2"; badgeTxt = mp?.isFinal ? `${pName(t2[0])} wins ${mp.label}` : `${pName(t2[0])} ${mp?.label||""}`; }
+                      else              { badgeCls="halved"; badgeTxt = mp?.label || "Halved"; }
                     } else {
-                      if (res.rcPoints.team1>res.rcPoints.team2)      { badgeCls="win1"; badgeTxt=`${teams[1].name} wins`; }
-                      else if (res.rcPoints.team2>res.rcPoints.team1) { badgeCls="win2"; badgeTxt=`${teams[2].name} wins`; }
-                      else { badgeCls="halved"; badgeTxt="Halved 1.5-1.5"; }
+                      if (res.rcPoints.team1>res.rcPoints.team2)      { badgeCls="win1"; badgeTxt = mp?.isFinal ? `${teams[1].name} wins ${mp.label}` : `${teams[1].name} ${mp?.label||""}`; }
+                      else if (res.rcPoints.team2>res.rcPoints.team1) { badgeCls="win2"; badgeTxt = mp?.isFinal ? `${teams[2].name} wins ${mp.label}` : `${teams[2].name} ${mp?.label||""}`; }
+                      else { badgeCls="halved"; badgeTxt = mp?.label || "Halved"; }
                     }
                   }
                   return (
@@ -216,6 +217,11 @@ export default function Results() {
                               </div>
                             ))}
                           </div>
+                          {res.matchPlay && (
+                            <div style={{marginTop:"0.5rem",fontSize:"0.85rem",fontWeight:700,color:"var(--gray-800)"}}>
+                              {res.matchPlay.isFinal ? "Final: " : "Currently: "}{badgeTxt}
+                            </div>
+                          )}
                           {!isSingles && res.holeWins && (
                             <div style={{marginTop:"0.4rem",fontSize:"0.78rem",display:"flex",flexDirection:"column",gap:"0.1rem"}}>
                               <span style={{color:"var(--green-mid)",fontWeight:600}}>{teams[1].name} {res.holeWins.team1}</span>

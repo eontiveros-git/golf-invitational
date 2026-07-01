@@ -64,6 +64,41 @@ export function dailyLowNet(courseKey, roundsForCourse, ghinOverrides = {}) {
   return { first, second, payouts };
 }
 
+// Determines match-play result format (e.g. "3 & 2", "1 up", "AS")
+// by tracking the running margin hole-by-hole and detecting when the
+// match becomes mathematically decided (trailing side can't catch up).
+function closeoutResult(holeResults, sideAKey, sideBKey) {
+  let margin = 0;
+  let decidedAtHole = null;
+  let decidedMargin = 0;
+
+  for (let i = 0; i < holeResults.length; i++) {
+    const r = holeResults[i];
+    if (r === sideAKey) margin += 1;
+    else if (r === sideBKey) margin -= 1;
+
+    const holesRemaining = holeResults.length - (i + 1);
+    if (decidedAtHole === null && Math.abs(margin) > holesRemaining) {
+      decidedAtHole = i + 1;
+      decidedMargin = margin;
+    }
+  }
+
+  const finalMargin = margin;
+  const playedHoles = holeResults.filter(r => r !== null).length;
+
+  if (decidedAtHole !== null && decidedAtHole < holeResults.length) {
+    const holesLeft = holeResults.length - decidedAtHole;
+    return { isFinal: true, label: `${Math.abs(decidedMargin)} & ${holesLeft}`, margin: decidedMargin };
+  }
+  if (playedHoles === holeResults.length) {
+    if (finalMargin === 0) return { isFinal: true, label: "Halved", margin: 0 };
+    return { isFinal: true, label: `${Math.abs(finalMargin)} up`, margin: finalMargin };
+  }
+  if (margin === 0) return { isFinal: false, label: playedHoles>0 ? "All Square" : "Not started", margin: 0 };
+  return { isFinal: false, label: `${Math.abs(margin)} up thru ${playedHoles}`, margin };
+}
+
 // Best ball: each match worth 1 RC point (win=1, halved=0.5 each, loss=0)
 // "(3 Points)" in itinerary = 3 matches per day × 1 pt each = 3 pts available per day
 export function calcBestBall(courseKey, team1Ids, team2Ids, roundsMap, ghinOverrides = {}) {
@@ -92,7 +127,10 @@ export function calcBestBall(courseKey, team1Ids, team2Ids, roundsMap, ghinOverr
   if (t1Pts > t2Pts)      { rc1=1; rc2=0; }
   else if (t2Pts > t1Pts) { rc1=0; rc2=1; }
   else                     { rc1=0.5; rc2=0.5; }
-  return { holes, holeWins:{team1:t1Pts, team2:t2Pts}, rcPoints:{team1:rc1, team2:rc2} };
+
+  const matchPlay = closeoutResult(holes.map(h=>h.winner===1?1:h.winner===2?2:h.winner==="half"?"half":null), 1, 2);
+
+  return { holes, holeWins:{team1:t1Pts, team2:t2Pts}, rcPoints:{team1:rc1, team2:rc2}, matchPlay };
 }
 
 // Singles: each match worth 1 RC point
@@ -122,7 +160,10 @@ export function calcSingles(courseKey, p1Id, p2Id, roundsMap, ghinOverrides = {}
   if (p1Pts > p2Pts)      { rc1=1; rc2=0; }
   else if (p2Pts > p1Pts) { rc1=0; rc2=1; }
   else                     { rc1=0.5; rc2=0.5; }
-  return { holes, holeWins:{[p1Id]:p1Pts,[p2Id]:p2Pts}, rcPoints:{[p1Id]:rc1,[p2Id]:rc2} };
+
+  const matchPlay = closeoutResult(holes.map(h=>h.winner===p1Id?"a":h.winner===p2Id?"b":h.winner==="half"?"half":null), "a", "b");
+
+  return { holes, holeWins:{[p1Id]:p1Pts,[p2Id]:p2Pts}, rcPoints:{[p1Id]:rc1,[p2Id]:rc2}, matchPlay };
 }
 
 export function overallStandings(rounds, ghinOverrides = {}) {

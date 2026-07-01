@@ -43,8 +43,10 @@ export default function Dashboard() {
     if (!cr.length) return;
     const { totals: st } = skinPayouts(ck, cr, ghinOverrides);
     const { payouts: dp } = dailyLowNet(ck, cr, ghinOverrides);
+    const ctpForCourse = ctpWinners.filter(c => c.course_key === ck);
     players.forEach(p => {
-      const amt = (st[p.id]||0) + (dp[p.id]||0);
+      const ctpAmt = ctpForCourse.filter(c => c.player_id === p.id).length * 60; // $5 x 12 players per CTP hole
+      const amt = (st[p.id]||0) + (dp[p.id]||0) + ctpAmt;
       dailyMoney[p.id][ck] += amt;
       dailyMoney[p.id].total += amt;
     });
@@ -147,7 +149,7 @@ export default function Dashboard() {
 
         {/* Daily Money */}
         <div className="card">
-          <div className="card-header"><h2>Money Won</h2><span className="badge">Skins + Low Net</span></div>
+          <div className="card-header"><h2>Money Won</h2><span className="badge">Skins + Low Net + CTP</span></div>
           <div className="card-body" style={{padding:0}}>
             <div style={{overflowX:"auto"}}>
               <table className="leaderboard" style={{minWidth:380}}>

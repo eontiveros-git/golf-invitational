@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1a3a2a"/>
+  <rect x="14" y="14" width="484" height="484" rx="84" fill="none" stroke="#c9a84c" stroke-width="10"/>
+  <!-- flagstick -->
+  <line x1="256" y1="120" x2="256" y2="400" stroke="#f5f0e8" stroke-width="14" stroke-linecap="round"/>
+  <!-- flag -->
+  <path d="M256 130 L356 165 L256 200 Z" fill="#c9a84c"/>
+  <!-- hole/green mound -->
+  <ellipse cx="256" cy="400" rx="90" ry="22" fill="#2d5a3d"/>
+  <ellipse cx="256" cy="398" rx="34" ry="11" fill="#1a3a2a"/>
+  <!-- ball -->
+  <circle cx="170" cy="392" r="14" fill="#f5f0e8"/>
+</svg>

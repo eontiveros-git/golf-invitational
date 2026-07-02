@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
 :root {
   --green-deep:  #1a3a2a;
@@ -16,22 +16,34 @@
   --red:         #c0392b;
   --blue:        #1a4a7a;
 
-  --font-display: 'Bebas Neue', sans-serif;
-  --font-body:    'Inter', sans-serif;
-  --font-mono:    'Roboto Mono', monospace;
+  /* System font stack — feels native on iPhone/iPad, falls back beautifully everywhere else */
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+
+  /* Consistent type scale */
+  --text-xs:   0.7rem;
+  --text-sm:   0.8rem;
+  --text-base: 0.875rem;
+  --text-lg:   1rem;
+  --text-xl:   1.15rem;
+  --text-2xl:  1.4rem;
+  --text-3xl:  2rem;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
   font-family: var(--font-body);
+  font-size: var(--text-base);
   background: var(--gray-100);
   color: var(--gray-800);
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* ── LAYOUT ── */
-.app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+.app-shell { display: flex; flex-direction: column; min-height: 100vh; overflow-x: clip; }
 
 .top-bar {
   background: var(--green-deep);
@@ -42,24 +54,26 @@ body {
   align-items: center;
   gap: 1rem;
   height: calc(56px + env(safe-area-inset-top, 0));
-  position: fixed;
+  position: sticky;
   top: 0;
   left: 0;
   right: 0;
-  width: 100%;
   z-index: 100;
 }
 .top-bar-logo {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
+  font-family: var(--font-body);
+  font-size: var(--text-xl);
+  font-weight: 700;
   color: var(--gold);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 .top-bar-sub {
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
+  font-weight: 500;
   color: var(--green-light);
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -71,22 +85,21 @@ body {
   border-bottom: 1px solid var(--green-mid);
   overflow-x: auto;
   scrollbar-width: none;
-  position: fixed;
+  position: sticky;
   top: calc(56px + env(safe-area-inset-top, 0));
   left: 0;
   right: 0;
-  width: 100%;
   z-index: 99;
 }
 .nav-tabs::-webkit-scrollbar { display: none; }
 .nav-tab {
   font-family: var(--font-body);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--green-light);
-  padding: 0.65rem 1rem;
+  padding: 0.65rem 0.9rem;
   border: none;
   background: none;
   cursor: pointer;
@@ -97,7 +110,7 @@ body {
 .nav-tab:hover { color: var(--cream); }
 .nav-tab.active { color: var(--gold); border-bottom-color: var(--gold); }
 
-.page { padding: 1.5rem; padding-top: calc(96px + env(safe-area-inset-top, 0) + 1.5rem); max-width: 1100px; margin: 0 auto; }
+.page { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
 
 /* ── CARDS ── */
 .card {
@@ -116,18 +129,20 @@ body {
   gap: 0.5rem;
 }
 .card-header h2 {
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  letter-spacing: 0.08em;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 .card-header .badge {
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   background: var(--gold);
   color: var(--green-deep);
   padding: 0.2rem 0.5rem;
   border-radius: 3px;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 .card-body { padding: 1rem; }
 
@@ -137,7 +152,7 @@ body {
   width: 100%;
   border-collapse: collapse;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
 }
 .scorecard th, .scorecard td {
   border: 1px solid var(--gray-200);
@@ -149,21 +164,20 @@ body {
   background: var(--green-deep);
   color: var(--gold);
   font-weight: 600;
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
+  font-size: var(--text-xs);
 }
 .scorecard .row-label {
   text-align: left;
   font-family: var(--font-body);
   font-weight: 600;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   padding-left: 0.6rem;
   white-space: nowrap;
 }
 .scorecard .par-row td { background: var(--gray-100); color: var(--gray-600); font-weight: 600; }
 .scorecard .subtotal { background: var(--green-deep) !important; color: var(--gold) !important; font-weight: 700; }
-.scorecard .eagle  { background: #ffd700; color: #000; border-radius: 50%; }
-.scorecard .birdie { background: var(--gold-light); color: var(--green-deep); border-radius: 50%; }
+.scorecard .eagle  { background: #ffd700; color: #000; }
+.scorecard .birdie { background: var(--gold-light); color: var(--green-deep); }
 .scorecard .bogey  { background: #fee2e2; color: var(--red); }
 .scorecard .double { background: var(--red); color: #fff; }
 .scorecard .stroke-dot { position: relative; }
@@ -191,19 +205,38 @@ body {
   margin-bottom: 1.5rem;
 }
 .rc-team { text-align: center; }
-.rc-team-name { font-family: var(--font-display); font-size: 1.3rem; color: var(--cream); letter-spacing: 0.06em; }
-.rc-score { font-family: var(--font-display); font-size: 3.5rem; color: var(--gold); line-height: 1; }
-.rc-divider { font-family: var(--font-display); font-size: 1.5rem; color: var(--gray-400); }
-.rc-needed { font-size: 0.7rem; color: var(--green-light); letter-spacing: 0.08em; margin-top: 0.25rem; }
+.rc-team-name {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--cream);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.rc-score {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: var(--gold);
+  line-height: 1.1;
+}
+.rc-divider {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--gray-400);
+  letter-spacing: 0.1em;
+}
+.rc-needed { font-size: var(--text-xs); color: var(--green-light); letter-spacing: 0.06em; margin-top: 0.25rem; }
 
 /* ── LEADERBOARD ── */
 .leaderboard { width: 100%; border-collapse: collapse; }
 .leaderboard th {
   background: var(--green-deep);
   color: var(--gold);
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 0.5rem 0.75rem;
   text-align: left;
@@ -211,7 +244,7 @@ body {
 .leaderboard td {
   padding: 0.55rem 0.75rem;
   border-bottom: 1px solid var(--gray-200);
-  font-size: 0.85rem;
+  font-size: var(--text-base);
 }
 .leaderboard tr:hover td { background: var(--gray-100); }
 .leaderboard .pos { font-family: var(--font-mono); font-weight: 600; width: 2rem; }
@@ -237,12 +270,13 @@ body {
   background: var(--gray-100);
   border-bottom: 1px solid var(--gray-200);
   gap: 0.75rem;
+  flex-wrap: wrap;
 }
-.match-vs { font-size: 0.7rem; font-weight: 700; color: var(--gray-400); margin: 0 0.25rem; }
+.match-vs { font-size: var(--text-xs); font-weight: 700; color: var(--gray-400); margin: 0 0.25rem; }
 .match-result-badge {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   padding: 0.2rem 0.6rem;
   border-radius: 3px;
@@ -255,7 +289,7 @@ body {
 /* ── INPUTS ── */
 .score-input {
   font-family: var(--font-mono);
-  font-size: 1rem;
+  font-size: var(--text-base);
   font-weight: 600;
   width: 48px;
   height: 40px;
@@ -275,8 +309,8 @@ body {
 .btn {
   font-family: var(--font-body);
   font-weight: 600;
-  font-size: 0.82rem;
-  letter-spacing: 0.04em;
+  font-size: var(--text-sm);
+  letter-spacing: 0.02em;
   border: none;
   border-radius: 4px;
   padding: 0.55rem 1.1rem;
@@ -289,15 +323,15 @@ body {
 .btn-gold    { background: var(--gold); color: var(--green-deep); }
 .btn-danger  { background: var(--red); color: #fff; }
 .btn-ghost   { background: transparent; border: 1px solid var(--gray-200); color: var(--gray-600); }
-.btn-sm { padding: 0.3rem 0.7rem; font-size: 0.75rem; }
+.btn-sm { padding: 0.3rem 0.7rem; font-size: var(--text-xs); }
 
 /* ── FORM ── */
 .form-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem; }
 .form-group { display: flex; flex-direction: column; gap: 0.25rem; }
-.form-label { font-size: 0.72rem; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.06em; }
+.form-label { font-size: var(--text-xs); font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.06em; }
 .form-select, .form-input {
   font-family: var(--font-body);
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   padding: 0.45rem 0.65rem;
   border: 1px solid var(--gray-200);
   border-radius: 4px;
@@ -315,7 +349,7 @@ body {
   align-items: center;
   justify-content: center;
   border-radius: 3px;
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 .skin-hole .hole-num { font-family: var(--font-mono); color: var(--gray-400); font-size: 0.6rem; }
@@ -332,13 +366,14 @@ body {
   background: var(--white);
 }
 .ctp-item.won { border-color: var(--gold); background: #fffbf0; }
-.ctp-label { font-size: 0.68rem; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.06em; }
-.ctp-winner { font-size: 0.9rem; font-weight: 600; color: var(--green-mid); margin-top: 0.1rem; }
+.ctp-label { font-size: var(--text-xs); font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.06em; }
+.ctp-winner { font-size: var(--text-base); font-weight: 600; color: var(--green-mid); margin-top: 0.1rem; }
 
 /* ── RESPONSIVE ── */
 @media (max-width: 640px) {
   .page { padding: 0.75rem; }
-  .rc-score { font-size: 2.5rem; }
+  .rc-score { font-size: 1.75rem; }
+  .rc-banner { padding: 1rem; }
   .rc-banner { flex-direction: column; text-align: center; }
 }
 
@@ -355,14 +390,14 @@ body {
 .gap-2 { gap: 1rem; }
 .text-gold { color: var(--gold); }
 .text-green { color: var(--green-mid); }
-.text-muted { color: var(--gray-400); font-size: 0.8rem; }
+.text-muted { color: var(--gray-400); font-size: var(--text-sm); }
 .text-mono { font-family: var(--font-mono); }
 .divider { border: none; border-top: 1px solid var(--gray-200); margin: 1rem 0; }
 .tag {
   display: inline-block;
   font-size: 0.65rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 0.15rem 0.4rem;
   border-radius: 3px;

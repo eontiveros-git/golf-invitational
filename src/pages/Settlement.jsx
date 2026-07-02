@@ -186,17 +186,17 @@ export default function Settlement() {
                       }}>
                         <div style={{display:"flex",alignItems:"center",gap:"0.5rem",minWidth:100}}>
                           <span className={`tag tag-team${fromPlayer?.team}`} style={{fontSize:"0.6rem"}}></span>
-                          <span style={{fontWeight:700}}>{fromPlayer?.name}</span>
+                          <span style={{fontWeight:600,fontSize:"var(--text-base)"}}>{fromPlayer?.name}</span>
                         </div>
                         <div style={{flex:1,display:"flex",alignItems:"center",gap:"0.5rem"}}>
                           <div style={{flex:1,height:2,background:"var(--red)",borderRadius:1}}/>
-                          <span style={{fontFamily:"var(--font-mono)",fontWeight:700,fontSize:"1rem",color:"var(--red)",whiteSpace:"nowrap"}}>
+                          <span style={{fontFamily:"var(--font-mono)",fontWeight:700,fontSize:"var(--text-sm)",color:"var(--red)",whiteSpace:"nowrap"}}>
                             pays ${Math.round(t.amount)}
                           </span>
                           <div style={{flex:1,height:2,background:"var(--green-mid)",borderRadius:1}}/>
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:"0.5rem",minWidth:100,justifyContent:"flex-end"}}>
-                          <span style={{fontWeight:700}}>{toPlayer?.name}</span>
+                          <span style={{fontWeight:600,fontSize:"var(--text-base)"}}>{toPlayer?.name}</span>
                           <span className={`tag tag-team${toPlayer?.team}`} style={{fontSize:"0.6rem"}}></span>
                         </div>
                       </div>

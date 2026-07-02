@@ -93,7 +93,7 @@ export default function Matchups({ onSave }) {
             return (
               <div key={mi} className="match-card">
                 <div className="match-card-header">
-                  <span style={{fontFamily:"var(--font-display)",fontSize:"1rem",color:"var(--gray-600)"}}>Match {mi+1}</span>
+                  <span style={{fontFamily:"var(--font-body)",fontWeight:700,fontSize:"0.85rem",color:"var(--gray-600)",letterSpacing:"0.04em",textTransform:"uppercase"}}>Match {mi+1}</span>
                   <span style={{fontSize:"0.75rem",color:"var(--gray-400)"}}>
                     {isSingles?"Singles · 6 Ryder Cup points":`Best Ball · ${teams[1].name} vs ${teams[2].name}`}
                   </span>
@@ -117,7 +117,7 @@ export default function Matchups({ onSave }) {
                       </select>
                     ))}
                   </div>
-                  <div style={{fontFamily:"var(--font-display)",fontSize:"1.4rem",color:"var(--gray-400)",textAlign:"center"}}>VS</div>
+                  <div style={{fontFamily:"var(--font-body)",fontSize:"0.85rem",fontWeight:700,color:"var(--gray-400)",letterSpacing:"0.1em",textAlign:"center"}}>VS</div>
                   {/* Team 2 */}
                   <div style={{display:"flex",flexDirection:"column",gap:"0.4rem"}}>
                     <div className="tag tag-team2" style={{marginBottom:"0.25rem",display:"inline-block",width:"fit-content"}}>{teams[2].name}</div>

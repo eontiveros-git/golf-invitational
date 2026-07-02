@@ -263,7 +263,7 @@ export default function ScoreEntry({ onSave }) {
               <div style={{border:"2px solid var(--green-mid)",borderRadius:8,padding:"0.75rem",background:"#f0faf4"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"0.6rem"}}>
                   <div>
-                    <span style={{fontFamily:"var(--font-display)",fontSize:"1.6rem",color:"var(--green-deep)"}}>Hole {activeHole+1}</span>
+                    <span style={{fontFamily:"var(--font-body)",fontSize:"1.1rem",fontWeight:700,color:"var(--green-deep)"}}>Hole {activeHole+1}</span>
                     <span style={{marginLeft:"0.6rem",fontSize:"0.85rem",color:"var(--gray-600)"}}>Par {currentPar}</span>
                     {currentStrokes>0 && <span style={{marginLeft:"0.5rem",fontSize:"0.75rem",color:"var(--gold)",fontWeight:700}}>+{currentStrokes} stroke{currentStrokes>1?"s":""}</span>}
                   </div>
@@ -277,7 +277,7 @@ export default function ScoreEntry({ onSave }) {
                     <button key={n}
                       onClick={()=>tapScore(activePlayer, activeHole, n)}
                       style={{
-                        padding:"0.9rem 0", fontSize:"1.3rem", fontWeight:700,
+                        padding:"0.9rem 0", fontSize:"1.25rem", fontWeight:700,
                         fontFamily:"var(--font-mono)", borderRadius:6, border:"none", cursor:"pointer",
                         background: Number(currentVal)===n ? "var(--green-mid)" : "var(--white)",
                         color: Number(currentVal)===n ? "#fff" : "var(--gray-800)",

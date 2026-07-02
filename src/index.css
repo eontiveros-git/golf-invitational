@@ -42,8 +42,11 @@ body {
   align-items: center;
   gap: 1rem;
   height: calc(56px + env(safe-area-inset-top, 0));
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
   z-index: 100;
 }
 .top-bar-logo {
@@ -68,6 +71,12 @@ body {
   border-bottom: 1px solid var(--green-mid);
   overflow-x: auto;
   scrollbar-width: none;
+  position: fixed;
+  top: calc(56px + env(safe-area-inset-top, 0));
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 99;
 }
 .nav-tabs::-webkit-scrollbar { display: none; }
 .nav-tab {
@@ -88,7 +97,7 @@ body {
 .nav-tab:hover { color: var(--cream); }
 .nav-tab.active { color: var(--gold); border-bottom-color: var(--gold); }
 
-.page { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
+.page { padding: 1.5rem; padding-top: calc(96px + env(safe-area-inset-top, 0) + 1.5rem); max-width: 1100px; margin: 0 auto; }
 
 /* ── CARDS ── */
 .card {

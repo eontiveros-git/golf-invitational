@@ -47,7 +47,21 @@ export async function saveMatchup(courseKey, matchIndex, team1Players, team2Play
   return data;
 }
 
-// ── CTP ───────────────────────────────────────────────────────────────────
+// ── DAILY PAYMENTS ────────────────────────────────────────────────────────
+export async function getDailyPayments() {
+  const { data } = await supabase.from("daily_payments").select("*");
+  return data || [];
+}
+export async function upsertPayment(courseKey, fromPlayer, toPlayer, amount, paid) {
+  const { data } = await supabase
+    .from("daily_payments")
+    .upsert(
+      { course_key: courseKey, from_player: fromPlayer, to_player: toPlayer, amount, paid, updated_at: new Date().toISOString() },
+      { onConflict: "course_key,from_player,to_player" }
+    )
+    .select().single();
+  return data;
+}
 export async function getCtpWinners() {
   const { data } = await supabase.from("ctp_winners").select("*");
   return data || [];

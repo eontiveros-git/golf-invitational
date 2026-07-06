@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { COURSES, COURSE_KEYS, courseHandicap, strokesPerHole } from "../lib/gameData";
+import { COURSES as DEFAULT_COURSES, COURSE_KEYS, courseHandicap, strokesPerHole } from "../lib/gameData";
 import { getRounds, saveRound, deleteRound, getSettings } from "../lib/supabase";
 import { getRoundTotals } from "../lib/scoring";
 import { useAppData } from "../lib/useAppData";
@@ -16,7 +16,7 @@ function scoreClass(score, par) {
 const NUMPAD = [1,2,3,4,5,6,7,8,9,10,11,12];
 
 export default function ScoreEntry({ onSave }) {
-  const { players, ghinOverrides: appGhinOverrides } = useAppData();
+  const { players, ghinOverrides: appGhinOverrides, courses } = useAppData();
   const [courseKey, setCourseKey] = useState("bearDance");
   const [scores, setScores]   = useState({}); // { playerId: [18 values] }
   const [saved, setSaved]     = useState({}); // { playerId: true }
@@ -28,7 +28,7 @@ export default function ScoreEntry({ onSave }) {
   const [flashSaved, setFlashSaved] = useState(false);
   const saveTimer = useRef(null);
 
-  const course = COURSES[courseKey];
+  const course = (courses && courses[courseKey]) || DEFAULT_COURSES[courseKey];
 
   useEffect(() => {
     if (players.length && !activePlayer) setActivePlayer(players[0].id);
@@ -132,7 +132,7 @@ export default function ScoreEntry({ onSave }) {
   const backPar   = course.par.slice(9).reduce((a,b)=>a+b,0);
   const frontGross = playerScores ? playerScores.slice(0,9).reduce((a,b)=>a+(b||0),0) : null;
   const backGross  = playerScores ? playerScores.slice(9).reduce((a,b)=>a+(b||0),0) : null;
-  const totals = (allFilled && playerScores) ? getRoundTotals(courseKey, activePlayer, playerScores, ghinOverrides) : null;
+  const totals = (allFilled && playerScores) ? getRoundTotals(courseKey, activePlayer, playerScores, ghinOverrides, courses) : null;
 
   const currentVal = getScore(activePlayer, activeHole);
   const currentPar = course.par[activeHole];
@@ -151,7 +151,7 @@ export default function ScoreEntry({ onSave }) {
               <label className="form-label">Course</label>
               <select className="form-select" value={courseKey} onChange={e=>setCourseKey(e.target.value)}>
                 {COURSE_KEYS.map(ck => (
-                  <option key={ck} value={ck}>{COURSES[ck].name} — {COURSES[ck].day}</option>
+                  <option key={ck} value={ck}>{DEFAULT_COURSES[ck].name} — {DEFAULT_COURSES[ck].day}</option>
                 ))}
               </select>
             </div>
@@ -417,7 +417,7 @@ export default function ScoreEntry({ onSave }) {
               {players.map(p => {
                 const ch2 = courseHandicap(ghinOverrides[p.id]??p.ghin, course.slope);
                 const gs = scores[p.id];
-                const t = gs && gs.every(v=>v!=null&&!isNaN(v)) ? getRoundTotals(courseKey, p.id, gs.map(Number), ghinOverrides) : null;
+                const t = gs && gs.every(v=>v!=null&&!isNaN(v)) ? getRoundTotals(courseKey, p.id, gs.map(Number), ghinOverrides, courses) : null;
                 const count = (gs||[]).filter(v=>v!==null&&v!==undefined&&!isNaN(v)).length;
                 return (
                   <tr key={p.id} onClick={()=>{setActivePlayer(p.id); setActiveHole(0);}} style={{cursor:"pointer", background:activePlayer===p.id?"var(--gray-100)":""}}>

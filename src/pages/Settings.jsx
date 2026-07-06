@@ -1,124 +1,169 @@
 import { useState, useEffect } from "react";
-import { PLAYERS, COURSES, COURSE_KEYS, courseHandicap, TEAMS as DEFAULT_TEAMS } from "../lib/gameData";
-import { getSettings, saveSettings, getCtpWinners, saveCtpWinner } from "../lib/supabase";
+import { PLAYERS, COURSES, COURSE_KEYS, courseHandicap, TEAMS as DEFAULT_TEAMS, PRIZES, PAST_WINNERS, TOURNAMENT } from "../lib/gameData";
+import { getSettings, saveSettings, getCtpWinners, saveCtpWinner, getMatchups, saveMatchup } from "../lib/supabase";
 
 const PIN = "golf26";
 
-export default function Settings({ onSave }) {
-  const [unlocked, setUnlocked]     = useState(false);
-  const [pinInput, setPinInput]     = useState("");
-  const [pinError, setPinError]     = useState(false);
-  const [handicaps, setHandicaps]   = useState({});
-  const [teamNames, setTeamNames]   = useState({
-    1: DEFAULT_TEAMS[1].name,
-    2: DEFAULT_TEAMS[2].name,
-  });
-  // playerIds per team: { 1: [...], 2: [...] }
-  const [teamRosters, setTeamRosters] = useState({
-    1: PLAYERS.filter(p=>p.team===1).map(p=>p.id),
-    2: PLAYERS.filter(p=>p.team===2).map(p=>p.id),
-  });
-  const [ctpCourse, setCtpCourse]   = useState("bearDance");
-  const [ctpWinners, setCtpWinners] = useState([]);
-  const [saving, setSaving]         = useState(false);
-  const [saved, setSaved]           = useState(false);
-  const [activeTab, setActiveTab]   = useState("teams");
+function getMatchTemplate(courseKey) {
+  if (courseKey==="frostCreek") return Array.from({length:6},(_,i)=>({index:i,type:"singles",team1:[null],team2:[null]}));
+  return Array.from({length:3},(_,i)=>({index:i,type:"bestball",team1:[null,null],team2:[null,null]}));
+}
 
-  useEffect(() => {
+export default function Settings({ onSave }) {
+  const [unlocked, setUnlocked]       = useState(false);
+  const [pinInput, setPinInput]       = useState("");
+  const [pinError, setPinError]       = useState(false);
+  const [activeTab, setActiveTab]     = useState("teams");
+
+  // Teams
+  const [teamNames, setTeamNames]     = useState({1:DEFAULT_TEAMS[1].name, 2:DEFAULT_TEAMS[2].name});
+  const [teamRosters, setTeamRosters] = useState({
+    1:PLAYERS.filter(p=>p.team===1).map(p=>p.id),
+    2:PLAYERS.filter(p=>p.team===2).map(p=>p.id),
+  });
+
+  // Handicaps
+  const [handicaps, setHandicaps]     = useState({});
+
+  // Courses
+  const [courseOverrides, setCourseOverrides] = useState({});
+  const [editCourse, setEditCourse]   = useState("bearDance");
+
+  // Matchups
+  const [matchupCourse, setMatchupCourse] = useState("bearDance");
+  const [matches, setMatches]         = useState(getMatchTemplate("bearDance"));
+  const [matchSaved, setMatchSaved]   = useState(false);
+
+  // CTP
+  const [ctpCourse, setCtpCourse]     = useState("bearDance");
+  const [ctpWinners, setCtpWinners]   = useState([]);
+
+  // Champions
+  const [prizeWinners, setPrizeWinners] = useState({});
+  const [pastWinners, setPastWinners]   = useState(PAST_WINNERS);
+
+  const [saving, setSaving]           = useState(false);
+  const [saved, setSaved]             = useState(false);
+
+  useEffect(()=>{
     async function load() {
       const s = await getSettings();
       if (s?.handicaps) setHandicaps(s.handicaps);
       if (s?.teams) {
-        setTeamNames({
-          1: s.teams[1]?.name ?? DEFAULT_TEAMS[1].name,
-          2: s.teams[2]?.name ?? DEFAULT_TEAMS[2].name,
-        });
-        setTeamRosters({
-          1: s.teams[1]?.playerIds ?? PLAYERS.filter(p=>p.team===1).map(p=>p.id),
-          2: s.teams[2]?.playerIds ?? PLAYERS.filter(p=>p.team===2).map(p=>p.id),
-        });
+        setTeamNames({1:s.teams[1]?.name??DEFAULT_TEAMS[1].name, 2:s.teams[2]?.name??DEFAULT_TEAMS[2].name});
+        setTeamRosters({1:s.teams[1]?.playerIds??PLAYERS.filter(p=>p.team===1).map(p=>p.id), 2:s.teams[2]?.playerIds??PLAYERS.filter(p=>p.team===2).map(p=>p.id)});
       }
+      if (s?.course_overrides) setCourseOverrides(s.course_overrides);
+      if (s?.prize_winners) setPrizeWinners(s.prize_winners);
+      // Only apply saved past_winners if it has the expected array structure
+      if (s?.past_winners?.lowGross?.length) setPastWinners(s.past_winners);
       const ctp = await getCtpWinners();
       setCtpWinners(ctp);
     }
     load();
-  }, []);
+  },[]);
+
+  useEffect(()=>{
+    async function loadMatchups() {
+      const tpl = getMatchTemplate(matchupCourse);
+      const all = await getMatchups();
+      const forCourse = all.filter(m=>m.course_key===matchupCourse);
+      forCourse.forEach(m=>{ if(tpl[m.match_index]){tpl[m.match_index].team1=m.team1_players; tpl[m.match_index].team2=m.team2_players;} });
+      setMatches(tpl); setMatchSaved(false);
+    }
+    loadMatchups();
+  },[matchupCourse]);
 
   function tryUnlock() {
-    if (pinInput === PIN) { setUnlocked(true); setPinError(false); }
+    if(pinInput===PIN){setUnlocked(true);setPinError(false);}
     else setPinError(true);
   }
 
   async function handleSave() {
     setSaving(true);
     const existing = await getSettings();
-    await saveSettings({
-      ...existing,
-      handicaps,
-      teams: {
-        1: { name: teamNames[1], playerIds: teamRosters[1] },
-        2: { name: teamNames[2], playerIds: teamRosters[2] },
-      },
-    });
-    setSaving(false); setSaved(true);
-    onSave?.();
-    setTimeout(() => setSaved(false), 2500);
+    await saveSettings({...existing, handicaps, teams:{1:{name:teamNames[1],playerIds:teamRosters[1]}, 2:{name:teamNames[2],playerIds:teamRosters[2]}}, course_overrides:courseOverrides, prize_winners:prizeWinners, past_winners:pastWinners});
+    setSaving(false); setSaved(true); onSave?.();
+    setTimeout(()=>setSaved(false),2500);
   }
 
   async function handleCtpSave(holeIndex, playerId) {
-    await saveCtpWinner(ctpCourse, holeIndex, playerId || null);
-    const updated = await getCtpWinners();
-    setCtpWinners(updated);
-    onSave?.();
+    await saveCtpWinner(ctpCourse, holeIndex, playerId||null);
+    setCtpWinners(await getCtpWinners()); onSave?.();
   }
 
-  // Toggle a player's team assignment
+  async function handleMatchSave() {
+    for (const m of matches) await saveMatchup(matchupCourse, m.index, m.team1, m.team2);
+    setMatchSaved(true); onSave?.();
+  }
+
   function togglePlayerTeam(playerId, toTeam) {
-    const otherTeam = toTeam === 1 ? 2 : 1;
-    setTeamRosters(prev => ({
-      ...prev,
-      [toTeam]:    prev[toTeam].includes(playerId) ? prev[toTeam] : [...prev[toTeam], playerId],
-      [otherTeam]: prev[otherTeam].filter(id => id !== playerId),
+    const other = toTeam===1?2:1;
+    setTeamRosters(prev=>({...prev,[toTeam]:prev[toTeam].includes(playerId)?prev[toTeam]:[...prev[toTeam],playerId],[other]:prev[other].filter(id=>id!==playerId)}));
+    setSaved(false);
+  }
+
+  function setHoleValue(ck, field, hi, val) {
+    const parsed = parseInt(val,10);
+    if(isNaN(parsed)) return;
+    setCourseOverrides(prev=>{
+      const base=COURSES[ck]; const ex=prev[ck]||{};
+      const arr=[...(ex[field]||base[field])]; arr[hi]=parsed;
+      return{...prev,[ck]:{...ex,[field]:arr}};
+    });
+    setSaved(false);
+  }
+
+  function setMatchupSlot(matchIdx, side, slotIdx, playerId) {
+    setMatches(prev=>prev.map((m,i)=>{
+      if(i!==matchIdx) return m;
+      const arr=[...(m[side]||[])]; arr[slotIdx]=playerId||null;
+      return{...m,[side]:arr};
     }));
+    setMatchSaved(false);
   }
 
-  // Players not yet on either team
-  const allAssigned = [...teamRosters[1], ...teamRosters[2]];
-  const unassigned = PLAYERS.filter(p => !allAssigned.includes(p.id));
+  const ghinForPlayer = id => parseFloat(handicaps[id]??PLAYERS.find(p=>p.id===id)?.ghin??0);
+  const allAssigned=[...teamRosters[1],...teamRosters[2]];
+  const unassigned=PLAYERS.filter(p=>!allAssigned.includes(p.id));
+  const ctpPar3s=(COURSES[ctpCourse].par.map((p,i)=>({p,i})).filter(x=>x.p===3));
+  const team1Players=PLAYERS.filter(p=>teamRosters[1].includes(p.id));
+  const team2Players=PLAYERS.filter(p=>teamRosters[2].includes(p.id));
+  const isSingles=matchupCourse==="frostCreek";
+  const editCourseData={par:[...((courseOverrides[editCourse]?.par)||COURSES[editCourse].par)],hdcp:[...((courseOverrides[editCourse]?.hdcp)||COURSES[editCourse].hdcp)]};
+  const hasOverride=!!courseOverrides[editCourse];
 
-  const course = COURSES[ctpCourse];
-  const par3s = course.par.map((p,i)=>({p,i})).filter(x=>x.p===3);
+  const TABS=[
+    {id:"teams",label:"Teams"},
+    {id:"matchups",label:"Matchups"},
+    {id:"handicaps",label:"Handicaps"},
+    {id:"courses",label:"Courses"},
+    {id:"ctp",label:"CTP"},
+    {id:"champions",label:"Champions"},
+    {id:"reference",label:"Reference"},
+  ];
 
-  if (!unlocked) {
-    return (
-      <div className="card" style={{maxWidth:380}}>
-        <div className="card-header"><h2>Admin Access</h2></div>
-        <div className="card-body">
-          <p style={{fontSize:"0.85rem",color:"var(--gray-600)",marginBottom:"0.75rem"}}>
-            Enter the PIN to edit teams, handicaps, CTP winners, and other settings.
-          </p>
-          <div style={{display:"flex",gap:"0.5rem"}}>
-            <input type="password" className="form-input" placeholder="PIN" value={pinInput}
-              style={{width:120}}
-              onChange={e=>{ setPinInput(e.target.value); setPinError(false); }}
-              onKeyDown={e=>e.key==="Enter"&&tryUnlock()} />
-            <button className="btn btn-primary" onClick={tryUnlock}>Unlock</button>
-          </div>
-          {pinError && <p style={{color:"var(--red)",fontSize:"0.8rem",marginTop:"0.4rem"}}>Incorrect PIN.</p>}
+  if (!unlocked) return (
+    <div className="card" style={{maxWidth:380}}>
+      <div className="card-header"><h2>Admin Access</h2></div>
+      <div className="card-body">
+        <p style={{fontSize:"var(--text-sm)",color:"var(--gray-600)",marginBottom:"0.75rem"}}>
+          Enter the PIN to edit teams, matchups, handicaps, courses, and awards.
+        </p>
+        <div style={{display:"flex",gap:"0.5rem"}}>
+          <input type="password" className="form-input" placeholder="PIN" value={pinInput} style={{width:120}}
+            onChange={e=>{setPinInput(e.target.value);setPinError(false);}} onKeyDown={e=>e.key==="Enter"&&tryUnlock()} />
+          <button className="btn btn-primary" onClick={tryUnlock}>Unlock</button>
         </div>
+        {pinError&&<p style={{color:"var(--red)",fontSize:"var(--text-sm)",marginTop:"0.4rem"}}>Incorrect PIN.</p>}
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <div>
       <div style={{display:"flex",gap:"0.4rem",marginBottom:"1rem",flexWrap:"wrap"}}>
-        {[
-          { id:"teams",     label:"Teams" },
-          { id:"handicaps", label:"Handicaps" },
-          { id:"ctp",       label:"CTP Winners" },
-          { id:"reference", label:"Reference" },
-        ].map(t=>(
+        {TABS.map(t=>(
           <button key={t.id} className={`btn btn-sm${activeTab===t.id?" btn-primary":" btn-ghost"}`} onClick={()=>setActiveTab(t.id)}>
             {t.label}
           </button>
@@ -126,7 +171,7 @@ export default function Settings({ onSave }) {
       </div>
 
       {/* ── TEAMS ── */}
-      {activeTab === "teams" && (
+      {activeTab==="teams"&&(
         <div>
           <div className="card mb-2">
             <div className="card-header"><h2>Team Names</h2></div>
@@ -135,85 +180,111 @@ export default function Settings({ onSave }) {
                 {[1,2].map(t=>(
                   <div key={t} style={{display:"flex",flexDirection:"column",gap:"0.4rem"}}>
                     <label className="form-label">Team {t} Name</label>
-                    <input className="form-input"
-                      value={teamNames[t]}
-                      placeholder={`Team ${t} name`}
-                      onChange={e=>setTeamNames(prev=>({...prev,[t]:e.target.value}))} />
+                    <input className="form-input" value={teamNames[t]} onChange={e=>setTeamNames(prev=>({...prev,[t]:e.target.value}))} />
                   </div>
                 ))}
               </div>
             </div>
           </div>
-
           <div className="card mb-2">
-            <div className="card-header"><h2>Team Rosters</h2>
-              <span className="badge">Drag players between teams</span>
-            </div>
+            <div className="card-header"><h2>Rosters</h2></div>
             <div className="card-body">
-              <p style={{fontSize:"0.82rem",color:"var(--gray-400)",marginBottom:"1rem"}}>
-                Click a player's team button to move them. Each team needs 6 players.
-              </p>
               <div className="grid-2" style={{marginBottom:"1rem"}}>
                 {[1,2].map(t=>(
                   <div key={t}>
-                    <div style={{
-                      fontWeight:700, fontSize:"0.9rem", marginBottom:"0.5rem",
-                      color: t===1?"var(--green-mid)":"var(--blue)",
-                      borderBottom:`2px solid ${t===1?"var(--green-light)":"var(--blue)"}`,
-                      paddingBottom:"0.3rem"
-                    }}>
+                    <div style={{fontWeight:700,fontSize:"var(--text-base)",marginBottom:"0.5rem",color:t===1?"var(--green-mid)":"var(--blue)",borderBottom:`2px solid ${t===1?"var(--green-light)":"var(--blue)"}`,paddingBottom:"0.3rem"}}>
                       {teamNames[t]} ({teamRosters[t].length})
                     </div>
-                    <div style={{display:"flex",flexDirection:"column",gap:"0.35rem"}}>
-                      {teamRosters[t].map(id=>{
-                        const p = PLAYERS.find(x=>x.id===id);
-                        const otherTeam = t===1?2:1;
-                        return (
-                          <div key={id} style={{
-                            display:"flex",alignItems:"center",justifyContent:"space-between",
-                            padding:"0.4rem 0.6rem",borderRadius:4,
-                            background: t===1?"#e8f5ee":"#e8eef5",
-                            border:`1px solid ${t===1?"var(--green-light)":"var(--blue)"}`,
-                          }}>
-                            <span style={{fontWeight:600,fontSize:"0.85rem"}}>{p?.name}</span>
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              onClick={()=>togglePlayerTeam(id, otherTeam)}
-                              title={`Move to ${teamNames[otherTeam]}`}
-                              style={{fontSize:"0.7rem"}}
-                            >
-                              → {teamNames[otherTeam].split(" ")[0]}
-                            </button>
-                          </div>
-                        );
-                      })}
-                      {teamRosters[t].length === 0 && (
-                        <div style={{fontSize:"0.8rem",color:"var(--gray-400)",fontStyle:"italic",padding:"0.5rem"}}>No players assigned</div>
-                      )}
-                    </div>
+                    {teamRosters[t].map(id=>{
+                      const p=PLAYERS.find(x=>x.id===id);
+                      return(
+                        <div key={id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0.4rem 0.6rem",borderRadius:4,background:t===1?"#e8f5ee":"#e8eef5",border:`1px solid ${t===1?"var(--green-light)":"var(--blue)"}`,marginBottom:2}}>
+                          <span style={{fontWeight:600,fontSize:"var(--text-sm)"}}>{p?.name}</span>
+                          <button className="btn btn-ghost btn-sm" onClick={()=>togglePlayerTeam(id,t===1?2:1)}>→ {teamNames[t===1?2:1].split(" ")[0]}</button>
+                        </div>
+                      );
+                    })}
                   </div>
                 ))}
               </div>
-
-              {unassigned.length > 0 && (
+              {unassigned.length>0&&(
                 <div style={{marginBottom:"1rem"}}>
-                  <div style={{fontWeight:700,fontSize:"0.82rem",color:"var(--red)",marginBottom:"0.5rem"}}>
-                    ⚠ Unassigned ({unassigned.length})
-                  </div>
+                  <div style={{fontWeight:700,fontSize:"var(--text-sm)",color:"var(--red)",marginBottom:"0.5rem"}}>⚠ Unassigned</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:"0.35rem"}}>
                     {unassigned.map(p=>(
-                      <div key={p.id} style={{display:"flex",gap:"0.3rem",alignItems:"center",border:"1px solid var(--gray-200)",borderRadius:4,padding:"0.3rem 0.5rem",background:"var(--gray-100)"}}>
-                        <span style={{fontSize:"0.82rem",fontWeight:600}}>{p.name}</span>
-                        <button className="btn btn-ghost btn-sm" onClick={()=>togglePlayerTeam(p.id,1)}>→ T1</button>
-                        <button className="btn btn-ghost btn-sm" onClick={()=>togglePlayerTeam(p.id,2)}>→ T2</button>
+                      <div key={p.id} style={{display:"flex",gap:"0.3rem",alignItems:"center",border:"1px solid var(--gray-200)",borderRadius:4,padding:"0.3rem 0.5rem"}}>
+                        <span style={{fontSize:"var(--text-sm)",fontWeight:600}}>{p.name}</span>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>togglePlayerTeam(p.id,1)}>T1</button>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>togglePlayerTeam(p.id,2)}>T2</button>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving?"Saving…":saved?"✓ Saved":"Save Teams"}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving?"Saving…":saved?"✓ Saved":"Save Teams"}
+      {/* ── MATCHUPS ── */}
+      {activeTab==="matchups"&&(
+        <div>
+          <div className="card mb-2">
+            <div className="card-body">
+              <div className="form-group">
+                <label className="form-label">Round</label>
+                <select className="form-select" value={matchupCourse} onChange={e=>setMatchupCourse(e.target.value)}>
+                  {COURSE_KEYS.map(ck=><option key={ck} value={ck}>{COURSES[ck].name} — {COURSES[ck].day}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="card mb-2">
+            <div className="card-header">
+              <h2>{isSingles?"Singles":"Best Ball Pairings"} — {COURSES[matchupCourse].name}</h2>
+              <span className="badge">{isSingles?"6 Matches · 1 Pt Each":"3 Matches · 1 Pt Each"}</span>
+            </div>
+            <div className="card-body">
+              {matches.map((m,mi)=>{
+                const used=new Set(matches.filter((_,x)=>x!==mi).flatMap(mm=>[...(mm.team1||[]),...(mm.team2||[])]).filter(Boolean));
+                return(
+                  <div key={mi} className="match-card">
+                    <div className="match-card-header">
+                      <span style={{fontWeight:700,fontSize:"var(--text-sm)",color:"var(--gray-600)",textTransform:"uppercase",letterSpacing:"0.04em"}}>Match {mi+1}</span>
+                    </div>
+                    <div style={{padding:"0.75rem",display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:"0.75rem",alignItems:"center"}}>
+                      <div style={{display:"flex",flexDirection:"column",gap:"0.4rem"}}>
+                        <div className="tag tag-team1" style={{display:"inline-block",width:"fit-content",marginBottom:"0.25rem"}}>{teamNames[1]}</div>
+                        {(m.team1||[]).map((pid,si)=>(
+                          <select key={si} className="form-select" value={pid||""} onChange={e=>setMatchupSlot(mi,"team1",si,e.target.value)}>
+                            <option value="">— Select —</option>
+                            {team1Players.map(p=>{
+                              const ch=courseHandicap(ghinForPlayer(p.id),COURSES[matchupCourse].slope);
+                              return <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>{p.name} (CH {ch})</option>;
+                            })}
+                          </select>
+                        ))}
+                      </div>
+                      <div style={{fontFamily:"var(--font-body)",fontSize:"var(--text-sm)",fontWeight:700,color:"var(--gray-400)",textAlign:"center"}}>VS</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:"0.4rem"}}>
+                        <div className="tag tag-team2" style={{display:"inline-block",width:"fit-content",marginBottom:"0.25rem"}}>{teamNames[2]}</div>
+                        {(m.team2||[]).map((pid,si)=>(
+                          <select key={si} className="form-select" value={pid||""} onChange={e=>setMatchupSlot(mi,"team2",si,e.target.value)}>
+                            <option value="">— Select —</option>
+                            {team2Players.map(p=>{
+                              const ch=courseHandicap(ghinForPlayer(p.id),COURSES[matchupCourse].slope);
+                              return <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>{p.name} (CH {ch})</option>;
+                            })}
+                          </select>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <button className="btn btn-primary" style={{marginTop:"0.75rem"}} onClick={handleMatchSave}>
+                {matchSaved?"✓ Saved":"Save Matchups"}
               </button>
             </div>
           </div>
@@ -221,58 +292,114 @@ export default function Settings({ onSave }) {
       )}
 
       {/* ── HANDICAPS ── */}
-      {activeTab === "handicaps" && (
+      {activeTab==="handicaps"&&(
         <div className="card">
-          <div className="card-header">
-            <h2>GHIN Handicaps</h2>
-            <span className="badge">Lock in July 20</span>
-          </div>
+          <div className="card-header"><h2>GHIN Handicaps</h2><span className="badge">Lock in July 20</span></div>
           <div className="card-body">
-            <p style={{fontSize:"0.82rem",color:"var(--gray-400)",marginBottom:"1rem"}}>
-              These override the placeholder handicaps. Course handicaps are auto-calculated per course.
-            </p>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"0.5rem",marginBottom:"1rem"}}>
-              {PLAYERS.map(p=>{
-                const val = handicaps[p.id] ?? p.ghin;
-                return (
-                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:"0.5rem",border:"1px solid var(--gray-200)",borderRadius:5,padding:"0.5rem 0.75rem"}}>
-                    <span style={{fontWeight:600,minWidth:60,fontSize:"0.85rem"}}>{p.name}</span>
-                    <input type="number" step="0.1" min="0" max="54"
-                      className="form-input" style={{width:70}} value={val}
-                      onChange={e=>setHandicaps(prev=>({...prev,[p.id]:e.target.value}))} />
-                    <span style={{fontSize:"0.72rem",color:"var(--gray-400)"}}>GHIN</span>
-                  </div>
-                );
-              })}
+              {PLAYERS.map(p=>(
+                <div key={p.id} style={{display:"flex",alignItems:"center",gap:"0.5rem",border:"1px solid var(--gray-200)",borderRadius:5,padding:"0.5rem 0.75rem"}}>
+                  <span style={{fontWeight:600,minWidth:60,fontSize:"var(--text-sm)"}}>{p.name}</span>
+                  <input type="number" step="0.1" min="0" max="54" className="form-input" style={{width:70}}
+                    value={handicaps[p.id]??p.ghin} onChange={e=>setHandicaps(prev=>({...prev,[p.id]:e.target.value}))} />
+                  <span style={{fontSize:"var(--text-xs)",color:"var(--gray-400)"}}>GHIN</span>
+                </div>
+              ))}
             </div>
-            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-              {saving?"Saving…":saved?"✓ Saved":"Save Handicaps"}
-            </button>
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving?"Saving…":saved?"✓ Saved":"Save Handicaps"}</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── COURSES ── */}
+      {activeTab==="courses"&&(
+        <div className="card">
+          <div className="card-header"><h2>Course Scorecard Editor</h2></div>
+          <div className="card-body">
+            <div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap",marginBottom:"1rem"}}>
+              {COURSE_KEYS.map(ck=>(
+                <button key={ck} className={`btn btn-sm${editCourse===ck?" btn-primary":" btn-ghost"}`} onClick={()=>setEditCourse(ck)}>
+                  {COURSES[ck].name.split(" ")[0]}{courseOverrides[ck]&&<span style={{marginLeft:"0.3rem",color:"var(--gold)"}}>✎</span>}
+                </button>
+              ))}
+            </div>
+            <div style={{marginBottom:"0.75rem",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"0.5rem"}}>
+              <span style={{fontWeight:700}}>{COURSES[editCourse].name}</span>
+              {hasOverride&&<button className="btn btn-ghost btn-sm" onClick={()=>{setCourseOverrides(prev=>{const n={...prev};delete n[editCourse];return n;});setSaved(false);}}>Reset to default</button>}
+            </div>
+            <div style={{display:"flex",gap:"0.75rem",flexWrap:"wrap",marginBottom:"1rem",padding:"0.75rem",background:"var(--gray-100)",borderRadius:5}}>
+              {[["Tee Color","tees","text"],["Rating","rating","number"],["Slope","slope","number"]].map(([label,field,type])=>(
+                <div key={field} style={{display:"flex",flexDirection:"column",gap:"0.2rem"}}>
+                  <label className="form-label">{label}</label>
+                  <input className="form-input" type={type} step={field==="rating"?"0.1":"1"} style={{width:field==="tees"?90:80}}
+                    value={courseOverrides[editCourse]?.[field]??COURSES[editCourse][field]}
+                    onChange={e=>{
+                      const v=type==="number"?(field==="slope"?parseInt(e.target.value,10):parseFloat(e.target.value)):e.target.value;
+                      setCourseOverrides(prev=>({...prev,[editCourse]:{...(prev[editCourse]||{}), [field]:v}}));
+                      setSaved(false);
+                    }} />
+                </div>
+              ))}
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{borderCollapse:"collapse",width:"100%",fontFamily:"var(--font-mono)",fontSize:"var(--text-xs)"}}>
+                <thead>
+                  <tr>
+                    <th style={{background:"var(--green-deep)",color:"var(--gold)",padding:"0.3rem 0.5rem",textAlign:"left",fontFamily:"var(--font-body)",fontSize:"var(--text-xs)"}}>Field</th>
+                    {Array.from({length:9},(_,i)=><th key={i} style={{background:"var(--green-deep)",color:"var(--gold)",padding:"0.3rem 0.4rem",textAlign:"center",minWidth:40}}>{i+1}</th>)}
+                    <th style={{background:"var(--green-mid)",color:"var(--gold)",padding:"0.3rem 0.4rem",textAlign:"center",fontWeight:700}}>Out</th>
+                    {Array.from({length:9},(_,i)=><th key={i+9} style={{background:"var(--green-deep)",color:"var(--gold)",padding:"0.3rem 0.4rem",textAlign:"center",minWidth:40}}>{i+10}</th>)}
+                    <th style={{background:"var(--green-mid)",color:"var(--gold)",padding:"0.3rem 0.4rem",textAlign:"center",fontWeight:700}}>In</th>
+                    <th style={{background:"var(--green-mid)",color:"var(--gold)",padding:"0.3rem 0.4rem",textAlign:"center",fontWeight:700}}>Tot</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[["par","Par",3,6],["hdcp","Hdcp Index",1,18]].map(([field,label,min,max])=>(
+                    <tr key={field}>
+                      <td style={{padding:"0.3rem 0.5rem",fontFamily:"var(--font-body)",fontWeight:600,fontSize:"var(--text-xs)",background:field==="par"?"var(--gray-100)":"var(--white)"}}>{label}</td>
+                      {editCourseData[field].slice(0,9).map((v,i)=>(
+                        <td key={i} style={{padding:"0.2rem",background:field==="par"?"var(--gray-100)":""}}>
+                          <input type="number" min={min} max={max} style={{width:36,textAlign:"center",fontFamily:"var(--font-mono)",fontSize:"var(--text-xs)",fontWeight:600,border:`1px solid ${v!==COURSES[editCourse][field][i]?"var(--gold)":"var(--gray-200)"}`,borderRadius:3,padding:"0.15rem 0"}}
+                            value={v} onChange={e=>setHoleValue(editCourse,field,i,e.target.value)} />
+                        </td>
+                      ))}
+                      <td style={{padding:"0.3rem",textAlign:"center",fontWeight:700,background:"var(--green-deep)",color:"var(--gold)"}}>{field==="par"?editCourseData.par.slice(0,9).reduce((a,b)=>a+b,0):"—"}</td>
+                      {editCourseData[field].slice(9).map((v,i)=>(
+                        <td key={i+9} style={{padding:"0.2rem",background:field==="par"?"var(--gray-100)":""}}>
+                          <input type="number" min={min} max={max} style={{width:36,textAlign:"center",fontFamily:"var(--font-mono)",fontSize:"var(--text-xs)",fontWeight:600,border:`1px solid ${v!==COURSES[editCourse][field][i+9]?"var(--gold)":"var(--gray-200)"}`,borderRadius:3,padding:"0.15rem 0"}}
+                            value={v} onChange={e=>setHoleValue(editCourse,field,i+9,e.target.value)} />
+                        </td>
+                      ))}
+                      <td style={{background:"var(--green-deep)"}}></td>
+                      <td style={{padding:"0.3rem",textAlign:"center",fontWeight:700,background:"var(--green-deep)",color:"var(--gold)"}}>{field==="par"?editCourseData.par.reduce((a,b)=>a+b,0):"—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button className="btn btn-primary" style={{marginTop:"1rem"}} onClick={handleSave} disabled={saving}>{saving?"Saving…":saved?"✓ Saved":"Save Course Changes"}</button>
           </div>
         </div>
       )}
 
       {/* ── CTP ── */}
-      {activeTab === "ctp" && (
+      {activeTab==="ctp"&&(
         <div className="card">
           <div className="card-header"><h2>Closest to Pin Winners</h2></div>
           <div className="card-body">
             <div className="form-group" style={{marginBottom:"1rem"}}>
               <label className="form-label">Course</label>
               <select className="form-select" style={{width:"auto"}} value={ctpCourse} onChange={e=>setCtpCourse(e.target.value)}>
-                {COURSE_KEYS.map(ck=>(
-                  <option key={ck} value={ck}>{COURSES[ck].name} — {COURSES[ck].day}</option>
-                ))}
+                {COURSE_KEYS.map(ck=><option key={ck} value={ck}>{COURSES[ck].name} — {COURSES[ck].day}</option>)}
               </select>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"0.5rem"}}>
-              {par3s.map(({i})=>{
-                const current = ctpWinners.find(c=>c.course_key===ctpCourse&&c.hole_index===i);
-                return (
+              {ctpPar3s.map(({i})=>{
+                const current=ctpWinners.find(c=>c.course_key===ctpCourse&&c.hole_index===i);
+                return(
                   <div key={i} style={{border:`1px solid ${current?"var(--gold)":"var(--gray-200)"}`,borderRadius:5,padding:"0.6rem 0.75rem",background:current?"#fffbf0":""}}>
                     <div className="form-label" style={{marginBottom:"0.3rem"}}>Hole {i+1} (Par 3)</div>
-                    <select className="form-select" style={{width:"100%"}} value={current?.player_id||""}
-                      onChange={e=>handleCtpSave(i,e.target.value)}>
+                    <select className="form-select" style={{width:"100%"}} value={current?.player_id||""} onChange={e=>handleCtpSave(i,e.target.value)}>
                       <option value="">— No winner yet —</option>
                       {PLAYERS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
@@ -284,32 +411,93 @@ export default function Settings({ onSave }) {
         </div>
       )}
 
+      {/* ── CHAMPIONS ── */}
+      {activeTab==="champions"&&(
+        <div>
+          <div className="card mb-2">
+            <div className="card-header"><h2>Prize Winners — {TOURNAMENT.year}</h2><span className="badge">Admin</span></div>
+            <div className="card-body">
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:"0.75rem",marginBottom:"1rem"}}>
+                {PRIZES.map(prize=>(
+                  <div key={prize.id} style={{border:"1px solid var(--gray-200)",borderRadius:5,padding:"0.75rem"}}>
+                    <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:"0.1rem"}}>{prize.label}</div>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--gold)",marginBottom:"0.4rem"}}>🏆 {prize.award}</div>
+                    {prize.id==="ryderCup"?(
+                      <input className="form-input" style={{width:"100%"}} placeholder="e.g. Jeff, Chet, Alex…"
+                        value={prizeWinners[prize.id]||""} onChange={e=>setPrizeWinners(prev=>({...prev,[prize.id]:e.target.value}))} />
+                    ):(
+                      <select className="form-select" style={{width:"100%"}} value={prizeWinners[prize.id]||""} onChange={e=>setPrizeWinners(prev=>({...prev,[prize.id]:e.target.value}))}>
+                        <option value="">— Select winner —</option>
+                        {PLAYERS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving?"Saving…":saved?"✓ Saved":"Save Winners"}</button>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-header"><h2>Past Champions</h2></div>
+            <div className="card-body" style={{padding:0}}>
+              <table className="leaderboard">
+                <thead><tr><th>Year</th><th>Low Gross</th><th>Low Net</th><th>Ryder Cup</th></tr></thead>
+                <tbody>
+                  {pastWinners.lowGross?.map((r,i)=>(
+                    <tr key={r.year} style={{background:r.year===TOURNAMENT.year?"#f0f7f3":""}}>
+                      <td style={{fontWeight:700,fontFamily:"var(--font-mono)"}}>{r.year}</td>
+                      <td style={{fontWeight:r.year===TOURNAMENT.year?700:400}}>{r.winner||<span style={{color:"var(--gray-400)"}}>TBD</span>} {r.score?<span style={{color:"var(--gray-400)",fontSize:"var(--text-xs)"}}>({r.score})</span>:""}</td>
+                      <td style={{fontWeight:r.year===TOURNAMENT.year?700:400}}>{pastWinners.lowNet?.[i]?.winner||<span style={{color:"var(--gray-400)"}}>TBD</span>} {pastWinners.lowNet?.[i]?.score?<span style={{color:"var(--gray-400)",fontSize:"var(--text-xs)"}}>({pastWinners.lowNet[i].score})</span>:""}</td>
+                      <td style={{fontWeight:r.year===TOURNAMENT.year?700:400}}>{pastWinners.ryderCup?.[i]?.winner||<span style={{color:"var(--gray-400)"}}>TBD</span>} {pastWinners.ryderCup?.[i]?.score?<span style={{color:"var(--gray-400)",fontSize:"var(--text-xs)"}}>({pastWinners.ryderCup[i].score})</span>:""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="card" style={{marginTop:"0.75rem"}}>
+            <div className="card-header"><h2>Update {TOURNAMENT.year} History</h2></div>
+            <div className="card-body">
+              {[{key:"lowGross",label:"Low Gross"},{key:"lowNet",label:"Low Net"},{key:"ryderCup",label:"Ryder Cup"}].map(({key,label})=>{
+                const row2026=pastWinners[key]?.find(r=>r.year===TOURNAMENT.year)||{year:TOURNAMENT.year,winner:"",score:""};
+                return(
+                  <div key={key} style={{marginBottom:"0.75rem"}}>
+                    <div className="form-label" style={{marginBottom:"0.3rem"}}>{label} {TOURNAMENT.year}</div>
+                    <div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap"}}>
+                      <input className="form-input" placeholder="Winner name(s)" style={{flex:2,minWidth:160}}
+                        value={row2026.winner}
+                        onChange={e=>setPastWinners(prev=>({...prev,[key]:(prev[key]||[]).map(r=>r.year===TOURNAMENT.year?{...r,winner:e.target.value}:r)}))} />
+                      <input className="form-input" placeholder="Score" style={{width:100}}
+                        value={row2026.score}
+                        onChange={e=>setPastWinners(prev=>({...prev,[key]:(prev[key]||[]).map(r=>r.year===TOURNAMENT.year?{...r,score:e.target.value}:r)}))} />
+                    </div>
+                  </div>
+                );
+              })}
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving?"Saving…":saved?"✓ Saved":"Save History"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── REFERENCE ── */}
-      {activeTab === "reference" && (
+      {activeTab==="reference"&&(
         <div className="card">
           <div className="card-header"><h2>Course Handicap Reference</h2></div>
           <div className="card-body" style={{padding:0}}>
             <table className="leaderboard">
-              <thead>
-                <tr>
-                  <th>Player</th><th>Team</th><th>GHIN</th>
-                  {COURSE_KEYS.map(ck=><th key={ck}>{COURSES[ck].name.split(" ")[0]}</th>)}
-                </tr>
-              </thead>
+              <thead><tr><th>Player</th><th>Team</th><th>GHIN</th>{COURSE_KEYS.map(ck=><th key={ck}>{COURSES[ck].name.split(" ")[0]}</th>)}</tr></thead>
               <tbody>
                 {PLAYERS.map(p=>{
-                  const ghin = parseFloat(handicaps[p.id]??p.ghin);
-                  const inT1 = teamRosters[1].includes(p.id);
-                  const inT2 = teamRosters[2].includes(p.id);
-                  const tNum = inT1?1:inT2?2:null;
-                  return (
+                  const ghin=ghinForPlayer(p.id);
+                  const inT1=teamRosters[1].includes(p.id), inT2=teamRosters[2].includes(p.id);
+                  const tNum=inT1?1:inT2?2:null;
+                  return(
                     <tr key={p.id}>
                       <td style={{fontWeight:600}}>{p.name}</td>
-                      <td>{tNum ? <span className={`tag tag-team${tNum}`}>{teamNames[tNum]}</span> : <span style={{color:"var(--gray-400)"}}>—</span>}</td>
+                      <td>{tNum?<span className={`tag tag-team${tNum}`}>{teamNames[tNum]}</span>:"—"}</td>
                       <td className="text-mono">{ghin}</td>
-                      {COURSE_KEYS.map(ck=>(
-                        <td key={ck} className="text-mono">{courseHandicap(ghin, COURSES[ck].slope)}</td>
-                      ))}
+                      {COURSE_KEYS.map(ck=><td key={ck} className="text-mono">{courseHandicap(ghin,COURSES[ck].slope)}</td>)}
                     </tr>
                   );
                 })}

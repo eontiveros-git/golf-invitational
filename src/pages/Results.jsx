@@ -11,7 +11,7 @@ function toPar(n) {
 function fmtMoney(n) { return n>0?`$${n%1===0?n:n.toFixed(2)}`:"—"; }
 
 export default function Results() {
-  const { rounds, matchups, ctpWinners, loading, ghinOverrides, roundsByCourse, grossByCoursePlayer, teams, players } = useAppData();
+  const { rounds, matchups, ctpWinners, loading, ghinOverrides, roundsByCourse, grossByCoursePlayer, teams, players, courses } = useAppData();
   const [tab, setTab] = useState("bearDance");
 
   if (loading) return <div className="spinner"/>;
@@ -22,11 +22,11 @@ export default function Results() {
   const cr = roundsByCourse[tab] || [];
   const gMap = grossByCoursePlayer[tab] || {};
 
-  const { skins, perSkin } = cr.length ? skinPayouts(tab, cr, ghinOverrides) : { skins:[], perSkin:0, totals:{} };
+  const { skins, perSkin } = cr.length ? skinPayouts(tab, cr, ghinOverrides, courses) : { skins:[], perSkin:0, totals:{} };
   const wonSkins = skins.filter(s=>s.winnerId);
 
   const { first: dlnFirst, second: dlnSecond } = cr.length
-    ? dailyLowNet(tab, cr, ghinOverrides)
+    ? dailyLowNet(tab, cr, ghinOverrides, courses)
     : { first:[], second:[] };
 
   const courseMatchups = matchups.filter(m=>m.course_key===tab);
@@ -34,15 +34,15 @@ export default function Results() {
     const isSingles = tab==="frostCreek";
     const t1=m.team1_players||[], t2=m.team2_players||[];
     if (isSingles && t1[0]&&t2[0]&&gMap[t1[0]]&&gMap[t2[0]]) {
-      return {...m, result: calcSingles(tab,t1[0],t2[0],gMap,ghinOverrides)};
+      return {...m, result: calcSingles(tab,t1[0],t2[0],gMap,ghinOverrides,courses)};
     } else if (!isSingles && t1.length===2&&t2.length===2&&(t1.some(id=>gMap[id])||t2.some(id=>gMap[id]))) {
-      return {...m, result: calcBestBall(tab,t1,t2,gMap,ghinOverrides)};
+      return {...m, result: calcBestBall(tab,t1,t2,gMap,ghinOverrides,courses)};
     }
     return {...m, result:null};
   });
 
   const rndLeader = cr
-    .map(r => ({playerId:r.playerId, ...getRoundTotals(tab,r.playerId,r.grossScores,ghinOverrides)}))
+    .map(r => ({playerId:r.playerId, ...getRoundTotals(tab,r.playerId,r.grossScores,ghinOverrides,courses)}))
     .sort((a,b)=>a.net-b.net);
 
   const courseCtp = ctpWinners.filter(c=>c.course_key===tab);

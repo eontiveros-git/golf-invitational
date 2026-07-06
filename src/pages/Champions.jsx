@@ -35,7 +35,7 @@ export default function Champions({ onSave }) {
       const rounds = await getRounds();
       const matchups = await getMatchups();
 
-      const st = overallStandings(rounds, ghinOverrides).filter(x=>x.rounds>0);
+      const st = overallStandings(rounds, ghinOverrides, null).filter(x=>x.rounds>0);
       setStandings(st.sort((a,b)=>a.totalNet-b.totalNet));
 
       // MVP

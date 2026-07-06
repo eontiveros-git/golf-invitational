@@ -1,22 +1,24 @@
 import { useState, useEffect, useCallback } from "react";
-import { getRounds, getSettings, getMatchups, getCtpWinners } from "./supabase";
-import { PLAYERS, TEAMS as DEFAULT_TEAMS } from "./gameData";
+import { getRounds, getSettings, getMatchups, getCtpWinners, getDailyPayments } from "./supabase";
+import { PLAYERS, TEAMS as DEFAULT_TEAMS, COURSES, COURSE_KEYS } from "./gameData";
 
 export function useAppData() {
-  const [rounds, setRounds]         = useState([]);
-  const [settings, setSettings]     = useState(null);
-  const [matchups, setMatchups]     = useState([]);
-  const [ctpWinners, setCtpWinners] = useState([]);
-  const [loading, setLoading]       = useState(true);
+  const [rounds, setRounds]           = useState([]);
+  const [settings, setSettings]       = useState(null);
+  const [matchups, setMatchups]       = useState([]);
+  const [ctpWinners, setCtpWinners]   = useState([]);
+  const [dailyPayments, setDailyPayments] = useState([]);
+  const [loading, setLoading]         = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [r, s, m, c] = await Promise.all([getRounds(), getSettings(), getMatchups(), getCtpWinners()]);
+      const [r, s, m, c, p] = await Promise.all([getRounds(), getSettings(), getMatchups(), getCtpWinners(), getDailyPayments()]);
       setRounds(r);
       setSettings(s);
       setMatchups(m);
       setCtpWinners(c);
+      setDailyPayments(p);
     } catch(e) { console.error(e); }
     setLoading(false);
   }, []);
@@ -31,8 +33,7 @@ export function useAppData() {
     });
   }
 
-  // Team config — merge saved settings over defaults
-  // teams: { 1: { name, playerIds: [] }, 2: { name, playerIds: [] } }
+  // Team config
   const savedTeams = settings?.teams;
   const teams = {
     1: {
@@ -52,6 +53,23 @@ export function useAppData() {
     return { ...p, team: inTeam1 ? 1 : inTeam2 ? 2 : p.team };
   });
 
+  // Course overrides — merge saved hdcp/par arrays over defaults
+  // Stored as: { bearDance: { hdcp: [...18], par: [...18] }, ... }
+  const courseOverrides = settings?.course_overrides || {};
+  const courses = {};
+  COURSE_KEYS.forEach(ck => {
+    const base = COURSES[ck];
+    const ov   = courseOverrides[ck] || {};
+    courses[ck] = {
+      ...base,
+      tees:   ov.tees   ?? base.tees,
+      rating: ov.rating ?? base.rating,
+      slope:  ov.slope  ?? base.slope,
+      par:    ov.par    || base.par,
+      hdcp:   ov.hdcp   || base.hdcp,
+    };
+  });
+
   // Build rounds maps
   const roundsByCourse = {};
   rounds.forEach(r => {
@@ -66,9 +84,9 @@ export function useAppData() {
   });
 
   return {
-    rounds, settings, matchups, ctpWinners, loading, reload: load,
+    rounds, settings, matchups, ctpWinners, dailyPayments, loading, reload: load,
     ghinOverrides, roundsByCourse, grossByCoursePlayer,
-    teams,    // { 1: { name, playerIds }, 2: { name, playerIds } }
-    players,  // PLAYERS array with team assignments applied from settings
+    teams, players,
+    courses,  // COURSES merged with any saved overrides
   };
 }

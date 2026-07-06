@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { COURSES as DEFAULT_COURSES, COURSE_KEYS, courseHandicap, strokesPerHole } from "../lib/gameData";
-import { getRounds, saveRound, deleteRound, getSettings } from "../lib/supabase";
+import { getRounds, saveRound, deleteRound, getSettings, getCtpWinners, saveCtpWinner } from "../lib/supabase";
 import { getRoundTotals } from "../lib/scoring";
 import { useAppData } from "../lib/useAppData";
 
@@ -19,14 +19,15 @@ const NUMPAD = [1,2,3,4,5,6,7,8,9,10,11,12];
 export default function ScoreEntry({ onSave }) {
   const { players, ghinOverrides: appGhinOverrides, courses } = useAppData();
   const [courseKey, setCourseKey] = useState("bearDance");
-  const [scores, setScores]   = useState({}); // { playerId: [18 values] }
-  const [saved, setSaved]     = useState({}); // { playerId: true }
+  const [scores, setScores]   = useState({});
+  const [saved, setSaved]     = useState({});
   const [saving, setSaving]   = useState(null);
   const [ghinOverrides, setGhinOverrides] = useState({});
   const [activePlayer, setActivePlayer] = useState(null);
-  const [mode, setMode] = useState("quick"); // "quick" | "full"
+  const [mode, setMode] = useState("quick");
   const [activeHole, setActiveHole] = useState(0);
   const [flashSaved, setFlashSaved] = useState(false);
+  const [ctpWinners, setCtpWinners] = useState([]);
   const saveTimer = useRef(null);
 
   const course = (courses && courses[courseKey]) || DEFAULT_COURSES[courseKey];
@@ -37,7 +38,7 @@ export default function ScoreEntry({ onSave }) {
 
   useEffect(() => {
     async function load() {
-      const [allRounds, s] = await Promise.all([getRounds(), getSettings()]);
+      const [allRounds, s, allCtp] = await Promise.all([getRounds(), getSettings(), getCtpWinners()]);
       const courseRounds = allRounds.filter(r => r.course_key === courseKey);
       const loaded = {};
       const savedMap = {};
@@ -47,6 +48,7 @@ export default function ScoreEntry({ onSave }) {
       });
       setScores(loaded);
       setSaved(savedMap);
+      setCtpWinners(allCtp);
       setActiveHole(0);
       if (s?.handicaps) {
         const ov = {};
@@ -124,7 +126,7 @@ export default function ScoreEntry({ onSave }) {
   if (!activePlayer) return <div className="spinner"/>;
 
   const player = players.find(p=>p.id===activePlayer);
-  const ch = courseHandicap(ghinOverrides[activePlayer] ?? player.ghin, course.slope);
+  const ch = courseHandicap(ghinOverrides[activePlayer] ?? player.ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0));
   const strokes = strokesPerHole(ch, course.hdcp);
   const playerScores = scores[activePlayer];
   const allFilled = playerScores && playerScores.length === 18 && playerScores.every(v => v !== null && !isNaN(v));
@@ -439,7 +441,7 @@ export default function ScoreEntry({ onSave }) {
             <thead><tr><th>Player</th><th>CH</th><th>Gross</th><th>Net</th><th>Net +/-</th><th>Status</th></tr></thead>
             <tbody>
               {players.map(p => {
-                const ch2 = courseHandicap(ghinOverrides[p.id]??p.ghin, course.slope);
+                const ch2 = courseHandicap(ghinOverrides[p.id]??p.ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0));
                 const gs = scores[p.id];
                 const t = gs && gs.every(v=>v!=null&&!isNaN(v)) ? getRoundTotals(courseKey, p.id, gs.map(Number), ghinOverrides, courses) : null;
                 const count = (gs||[]).filter(v=>v!==null&&v!==undefined&&!isNaN(v)).length;
@@ -462,6 +464,48 @@ export default function ScoreEntry({ onSave }) {
           </table>
         </div>
       </div>
+      {/* ── CTP ── */}
+      {(() => {
+        const par3Holes = course.par.map((p,i)=>({p,i})).filter(x=>x.p===3);
+        if (!par3Holes.length) return null;
+        async function handleCtpSave(holeIndex, playerId) {
+          await saveCtpWinner(courseKey, holeIndex, playerId || null);
+          const updated = await getCtpWinners();
+          setCtpWinners(updated);
+          onSave?.();
+        }
+        return (
+          <div className="card">
+            <div className="card-header">
+              <h2>Closest to Pin</h2>
+              <span className="badge">{par3Holes.length} par 3s · {course.name}</span>
+            </div>
+            <div className="card-body">
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:"0.5rem"}}>
+                {par3Holes.map(({i})=>{
+                  const current = ctpWinners.find(c=>c.course_key===courseKey&&c.hole_index===i);
+                  return (
+                    <div key={i} style={{border:`1px solid ${current?"var(--copper)":"var(--gray-200)"}`,borderRadius:5,padding:"0.6rem 0.75rem",background:current?"var(--copper-pale)":""}}>
+                      <div className="form-label" style={{marginBottom:"0.3rem"}}>Hole {i+1} · Par 3</div>
+                      <select className="form-select" style={{width:"100%"}}
+                        value={current?.player_id||""}
+                        onChange={e=>handleCtpSave(i,e.target.value)}>
+                        <option value="">— No winner yet —</option>
+                        {players.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      {current && (
+                        <div style={{marginTop:"0.3rem",fontSize:"var(--text-xs)",color:"var(--copper)",fontWeight:600}}>
+                          🏆 {players.find(p=>p.id===current.player_id)?.name}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

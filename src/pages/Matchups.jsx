@@ -107,7 +107,7 @@ export default function Matchups({ onSave }) {
                         onChange={e=>setSlot(mi,"team1",si,e.target.value)}>
                         <option value="">— Select player —</option>
                         {team1Players.map(p=>{
-                          const ch = courseHandicap(ghinOverrides[p.id]??p.ghin, course.slope);
+                          const ch = courseHandicap(ghinOverrides[p.id]??p.ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0));
                           return (
                             <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>
                               {p.name} (CH {ch})
@@ -126,7 +126,7 @@ export default function Matchups({ onSave }) {
                         onChange={e=>setSlot(mi,"team2",si,e.target.value)}>
                         <option value="">— Select player —</option>
                         {team2Players.map(p=>{
-                          const ch = courseHandicap(ghinOverrides[p.id]??p.ghin, course.slope);
+                          const ch = courseHandicap(ghinOverrides[p.id]??p.ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0));
                           return (
                             <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>
                               {p.name} (CH {ch})

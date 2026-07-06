@@ -99,8 +99,10 @@ export const PAST_WINNERS = {
   ],
 };
 
-export function courseHandicap(ghin, slope) {
-  return Math.round(ghin * (slope / 113));
+/** Course handicap = GHIN × (Slope / 113) + (Rating − Par), rounded */
+export function courseHandicap(ghin, slope, rating, par) {
+  const raw = ghin * (slope / 113) + ((rating ?? 72) - (par ?? 72));
+  return Math.round(raw);
 }
 
 export function strokesPerHole(courseHdcp, hdcpIndex) {

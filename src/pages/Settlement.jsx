@@ -50,7 +50,7 @@ function CollectOwes({ amount }) {
   return <span style={{fontFamily:"var(--font-mono)",color:"var(--gray-400)"}}>even</span>;
 }
 
-function DayCard({ ck, dayPayouts, players, dailyPayments, onTogglePaid, defaultOpen }) {
+function DayCard({ ck, dayPayouts, players, dailyPayments, onTogglePaid, defaultOpen, skinCount, perSkin }) {
   const [open, setOpen] = useState(defaultOpen);
   const dp = dayPayouts[ck] || {};
   const txns = dailyTransactions(dp);
@@ -77,7 +77,7 @@ function DayCard({ ck, dayPayouts, players, dailyPayments, onTogglePaid, default
           )}
         </div>
         <div style={{display:"flex",alignItems:"center",gap:"0.5rem"}}>
-          {totalOut>0&&<span className="badge">${Math.round(totalOut)} out</span>}
+          {skinCount>0&&<span className="badge">{skinCount} skins · ${perSkin}/skin</span>}
           <span style={{color:"var(--aspen)",fontSize:"var(--text-sm)"}}>{open?"▾":"▸"}</span>
         </div>
       </div>
@@ -235,11 +235,17 @@ export default function Settlement() {
         )}
       </div>
 
-      {COURSE_KEYS.map((ck,i)=>(
-        <DayCard key={ck} ck={ck} dayPayouts={dayPayouts} players={players}
-          dailyPayments={effectivePayments} onTogglePaid={handleTogglePaid}
-          defaultOpen={i===roundsPlayed.length-1} />
-      ))}
+      {COURSE_KEYS.map((ck,i)=>{
+        const cr = roundsByCourse[ck]||[];
+        const skinData = cr.length ? skinPayouts(ck, cr, ghinOverrides, courses) : { skins:[], perSkin:0 };
+        const wonSkins = skinData.skins.filter(s=>s.winnerId);
+        return (
+          <DayCard key={ck} ck={ck} dayPayouts={dayPayouts} players={players}
+            dailyPayments={effectivePayments} onTogglePaid={handleTogglePaid}
+            defaultOpen={i===roundsPlayed.length-1}
+            skinCount={wonSkins.length} perSkin={skinData.perSkin} />
+        );
+      })}
 
       {/* ── 2. RUNNING TOTAL ── */}
       {roundsPlayed.length>0&&(

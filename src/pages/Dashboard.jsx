@@ -127,7 +127,7 @@ export default function Dashboard({ onNavigate }) {
                   <tbody>
                     {rndLeader.map((s,i)=>{
                       const p=players.find(x=>x.id===s.playerId);
-                      const ch=courseHandicap(ghinOverrides[p?.id]??p?.ghin??0,course.slope);
+                      const ch=courseHandicap(ghinOverrides[p?.id]??p?.ghin??0,course.slope,course.rating,course.par.reduce((a,b)=>a+b,0));
                       return (
                         <tr key={s.playerId}>
                           <td className="text-mono">{i+1}</td>

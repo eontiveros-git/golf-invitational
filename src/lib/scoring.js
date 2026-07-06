@@ -7,7 +7,7 @@ function getCourse(courseKey, courseOverrides) {
 export function getFullNetScores(courseKey, playerId, grossScores, ghinOverrides = {}, courseOverrides = null) {
   const course = getCourse(courseKey, courseOverrides);
   const pmap = playerMap(ghinOverrides);
-  const ch = courseHandicap(pmap[playerId].ghin, course.slope);
+  const ch = courseHandicap(pmap[playerId].ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0));
   const strokes = strokesPerHole(ch, course.hdcp);
   return grossScores.map((g, i) => g - strokes[i]);
 }
@@ -42,7 +42,8 @@ export function skinPayouts(courseKey, roundsForCourse, ghinOverrides = {}, cour
   const buyIn = 20; // per player
   const pot = buyIn * playerCount;
   const wonSkins = skins.filter(s => s.winnerId);
-  const perSkin = wonSkins.length > 0 ? pot / wonSkins.length : 0;
+  // Round down to nearest dollar — nobody pays cents on a golf trip
+  const perSkin = wonSkins.length > 0 ? Math.floor(pot / wonSkins.length) : 0;
 
   // Gross winnings (what each player collects from the pot)
   const grossWinnings = {};
@@ -56,7 +57,7 @@ export function skinPayouts(courseKey, roundsForCourse, ghinOverrides = {}, cour
     netWinnings[r.playerId] = (grossWinnings[r.playerId]||0) - buyIn;
   });
 
-  return { skins, perSkin: Math.round(perSkin*100)/100, totals: grossWinnings, netTotals: netWinnings };
+  return { skins, perSkin, totals: grossWinnings, netTotals: netWinnings };
 }
 
 export function dailyLowNet(courseKey, roundsForCourse, ghinOverrides = {}, courseOverrides = null) {
@@ -82,8 +83,8 @@ export function dailyLowNet(courseKey, roundsForCourse, ghinOverrides = {}, cour
 
   const grossPayouts = {};
   PLAYERS.forEach(p => (grossPayouts[p.id] = 0));
-  first.forEach(r  => (grossPayouts[r.playerId] += firstPrize/first.length));
-  second.forEach(r => (grossPayouts[r.playerId] += secondPrize/second.length));
+  first.forEach(r  => (grossPayouts[r.playerId] += Math.floor(firstPrize/first.length)));
+  second.forEach(r => (grossPayouts[r.playerId] += Math.floor(secondPrize/second.length)));
 
   // Net = gross collected − own buy-in
   const netPayouts = {};
@@ -124,7 +125,7 @@ export function calcBestBall(courseKey, team1Ids, team2Ids, roundsMap, ghinOverr
   const course = getCourse(courseKey, courseOverrides);
   const pmap = playerMap(ghinOverrides);
   const allIds = [...team1Ids, ...team2Ids];
-  const hdcps = Object.fromEntries(allIds.map(id => [id, courseHandicap(pmap[id].ghin, course.slope)]));
+  const hdcps = Object.fromEntries(allIds.map(id => [id, courseHandicap(pmap[id].ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0))]));
   const minHdcp = Math.min(...allIds.map(id => hdcps[id]));
   const strokes = Object.fromEntries(allIds.map(id => [id, strokesPerHole(hdcps[id]-minHdcp, course.hdcp)]));
 
@@ -152,8 +153,8 @@ export function calcBestBall(courseKey, team1Ids, team2Ids, roundsMap, ghinOverr
 export function calcSingles(courseKey, p1Id, p2Id, roundsMap, ghinOverrides = {}, courseOverrides = null) {
   const course = getCourse(courseKey, courseOverrides);
   const pmap = playerMap(ghinOverrides);
-  const h1 = courseHandicap(pmap[p1Id].ghin, course.slope);
-  const h2 = courseHandicap(pmap[p2Id].ghin, course.slope);
+  const h1 = courseHandicap(pmap[p1Id].ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0));
+  const h2 = courseHandicap(pmap[p2Id].ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0));
   const min = Math.min(h1, h2);
   const s1 = strokesPerHole(h1-min, course.hdcp);
   const s2 = strokesPerHole(h2-min, course.hdcp);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { PLAYERS, COURSES, COURSE_KEYS, courseHandicap, TEAMS as DEFAULT_TEAMS, PRIZES, PAST_WINNERS, TOURNAMENT } from "../lib/gameData";
-import { getSettings, saveSettings, getCtpWinners, saveCtpWinner, getMatchups, saveMatchup } from "../lib/supabase";
+import { getSettings, saveSettings, getMatchups, saveMatchup } from "../lib/supabase";
 
 const PIN = "golf26";
 
@@ -34,9 +34,7 @@ export default function Settings({ onSave }) {
   const [matches, setMatches]         = useState(getMatchTemplate("bearDance"));
   const [matchSaved, setMatchSaved]   = useState(false);
 
-  // CTP
-  const [ctpCourse, setCtpCourse]     = useState("bearDance");
-  const [ctpWinners, setCtpWinners]   = useState([]);
+  // CTP state removed — CTP is now handled in Enter Scores page
 
   // Champions
   const [prizeWinners, setPrizeWinners] = useState({});
@@ -57,8 +55,6 @@ export default function Settings({ onSave }) {
       if (s?.prize_winners) setPrizeWinners(s.prize_winners);
       // Only apply saved past_winners if it has the expected array structure
       if (s?.past_winners?.lowGross?.length) setPastWinners(s.past_winners);
-      const ctp = await getCtpWinners();
-      setCtpWinners(ctp);
     }
     load();
   },[]);
@@ -85,11 +81,6 @@ export default function Settings({ onSave }) {
     await saveSettings({...existing, handicaps, teams:{1:{name:teamNames[1],playerIds:teamRosters[1]}, 2:{name:teamNames[2],playerIds:teamRosters[2]}}, course_overrides:courseOverrides, prize_winners:prizeWinners, past_winners:pastWinners});
     setSaving(false); setSaved(true); onSave?.();
     setTimeout(()=>setSaved(false),2500);
-  }
-
-  async function handleCtpSave(holeIndex, playerId) {
-    await saveCtpWinner(ctpCourse, holeIndex, playerId||null);
-    setCtpWinners(await getCtpWinners()); onSave?.();
   }
 
   async function handleMatchSave() {
@@ -126,7 +117,6 @@ export default function Settings({ onSave }) {
   const ghinForPlayer = id => parseFloat(handicaps[id]??PLAYERS.find(p=>p.id===id)?.ghin??0);
   const allAssigned=[...teamRosters[1],...teamRosters[2]];
   const unassigned=PLAYERS.filter(p=>!allAssigned.includes(p.id));
-  const ctpPar3s=(COURSES[ctpCourse].par.map((p,i)=>({p,i})).filter(x=>x.p===3));
   const team1Players=PLAYERS.filter(p=>teamRosters[1].includes(p.id));
   const team2Players=PLAYERS.filter(p=>teamRosters[2].includes(p.id));
   const isSingles=matchupCourse==="frostCreek";
@@ -138,7 +128,6 @@ export default function Settings({ onSave }) {
     {id:"matchups",label:"Matchups"},
     {id:"handicaps",label:"Handicaps"},
     {id:"courses",label:"Courses"},
-    {id:"ctp",label:"CTP"},
     {id:"champions",label:"Champions"},
     {id:"reference",label:"Reference"},
   ];
@@ -260,7 +249,7 @@ export default function Settings({ onSave }) {
                           <select key={si} className="form-select" value={pid||""} onChange={e=>setMatchupSlot(mi,"team1",si,e.target.value)}>
                             <option value="">— Select —</option>
                             {team1Players.map(p=>{
-                              const ch=courseHandicap(ghinForPlayer(p.id),COURSES[matchupCourse].slope);
+                              const ch=courseHandicap(ghinForPlayer(p.id),COURSES[matchupCourse].slope,COURSES[matchupCourse].rating,COURSES[matchupCourse].par.reduce((a,b)=>a+b,0));
                               return <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>{p.name} (CH {ch})</option>;
                             })}
                           </select>
@@ -273,7 +262,7 @@ export default function Settings({ onSave }) {
                           <select key={si} className="form-select" value={pid||""} onChange={e=>setMatchupSlot(mi,"team2",si,e.target.value)}>
                             <option value="">— Select —</option>
                             {team2Players.map(p=>{
-                              const ch=courseHandicap(ghinForPlayer(p.id),COURSES[matchupCourse].slope);
+                              const ch=courseHandicap(ghinForPlayer(p.id),COURSES[matchupCourse].slope,COURSES[matchupCourse].rating,COURSES[matchupCourse].par.reduce((a,b)=>a+b,0));
                               return <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>{p.name} (CH {ch})</option>;
                             })}
                           </select>
@@ -382,35 +371,6 @@ export default function Settings({ onSave }) {
         </div>
       )}
 
-      {/* ── CTP ── */}
-      {activeTab==="ctp"&&(
-        <div className="card">
-          <div className="card-header"><h2>Closest to Pin Winners</h2></div>
-          <div className="card-body">
-            <div className="form-group" style={{marginBottom:"1rem"}}>
-              <label className="form-label">Course</label>
-              <select className="form-select" style={{width:"auto"}} value={ctpCourse} onChange={e=>setCtpCourse(e.target.value)}>
-                {COURSE_KEYS.map(ck=><option key={ck} value={ck}>{COURSES[ck].name} — {COURSES[ck].day}</option>)}
-              </select>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"0.5rem"}}>
-              {ctpPar3s.map(({i})=>{
-                const current=ctpWinners.find(c=>c.course_key===ctpCourse&&c.hole_index===i);
-                return(
-                  <div key={i} style={{border:`1px solid ${current?"var(--gold)":"var(--gray-200)"}`,borderRadius:5,padding:"0.6rem 0.75rem",background:current?"#fffbf0":""}}>
-                    <div className="form-label" style={{marginBottom:"0.3rem"}}>Hole {i+1} (Par 3)</div>
-                    <select className="form-select" style={{width:"100%"}} value={current?.player_id||""} onChange={e=>handleCtpSave(i,e.target.value)}>
-                      <option value="">— No winner yet —</option>
-                      {PLAYERS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── CHAMPIONS ── */}
       {activeTab==="champions"&&(
         <div>
@@ -497,7 +457,7 @@ export default function Settings({ onSave }) {
                       <td style={{fontWeight:600}}>{p.name}</td>
                       <td>{tNum?<span className={`tag tag-team${tNum}`}>{teamNames[tNum]}</span>:"—"}</td>
                       <td className="text-mono">{ghin}</td>
-                      {COURSE_KEYS.map(ck=><td key={ck} className="text-mono">{courseHandicap(ghin,COURSES[ck].slope)}</td>)}
+                      {COURSE_KEYS.map(ck=><td key={ck} className="text-mono">{courseHandicap(ghin,COURSES[ck].slope,COURSES[ck].rating,COURSES[ck].par.reduce((a,b)=>a+b,0))}</td>)}
                     </tr>
                   );
                 })}

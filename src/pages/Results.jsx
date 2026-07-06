@@ -75,7 +75,7 @@ export default function Results() {
                   {rndLeader.map((s,i)=>{
                     const p = players.find(x=>x.id===s.playerId);
                     const ghin = ghinOverrides[p?.id]??p?.ghin??0;
-                    const ch = courseHandicap(ghin, course.slope);
+                    const ch = courseHandicap(ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0));
                     return (
                       <tr key={s.playerId}>
                         <td className="text-mono">{i+1}</td>

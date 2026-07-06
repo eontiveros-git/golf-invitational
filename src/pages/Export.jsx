@@ -22,7 +22,7 @@ function buildCSV(rounds, matchups, ctpWinners, ghinOverrides, roundsByCourse, g
     (roundsByCourse[ck]||[]).forEach(r => {
       const p = PLAYERS.find(x=>x.id===r.playerId);
       const ghin = ghinOverrides[p.id]??p.ghin;
-      const ch = courseHandicap(ghin, course.slope);
+      const ch = courseHandicap(ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0));
       const t = getRoundTotals(ck, p.id, r.grossScores, ghinOverrides);
       rows.push([p.name, TEAMS[p.team].name, ghin, course.name, course.day, ch, t.gross, t.net, fmtPar(t.grossToPar), fmtPar(t.netToPar)]);
     });

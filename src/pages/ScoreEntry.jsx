@@ -9,7 +9,8 @@ function scoreClass(score, par) {
   if (d <= -2) return "eagle";
   if (d === -1) return "birdie";
   if (d === 1)  return "bogey";
-  if (d >= 2)   return "double";
+  if (d === 2)  return "double";
+  if (d >= 3)   return "triple";
   return "";
 }
 
@@ -214,7 +215,7 @@ export default function ScoreEntry({ onSave }) {
           {/* ── QUICK MODE ── */}
           {mode === "quick" && (
             <div>
-              {/* Hole strip */}
+              {/* Hole strip — front 9 */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(9,1fr)",gap:"3px",marginBottom:"3px"}}>
                 {Array.from({length:9},(_,i)=>{
                   const v = getScore(activePlayer, i);
@@ -224,18 +225,28 @@ export default function ScoreEntry({ onSave }) {
                     <button key={i} onClick={()=>setActiveHole(i)}
                       style={{
                         aspectRatio:"1", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-                        borderRadius:5, border: isActiveHole ? "3px solid var(--green-mid)" : "1px solid var(--gray-200)",
-                        background: cl==="eagle"?"#ffd700":cl==="birdie"?"var(--gold-light)":cl==="bogey"?"#fee2e2":cl==="double"?"var(--red)":v!==""?"var(--gray-100)":"var(--white)",
-                        color: cl==="double"?"#fff":"var(--gray-800)",
-                        cursor:"pointer", padding:0,
+                        borderRadius:5,
+                        border: isActiveHole ? "3px solid var(--pine-mid)" : "1px solid var(--gray-200)",
+                        background: isActiveHole ? "#f0f7f3"
+                          : cl==="eagle"  ? "#c8e6c9"
+                          : cl==="birdie" ? "#dcedc8"
+                          : cl==="bogey"  ? "#ffcdd2"
+                          : cl==="double" ? "#ef9a9a"
+                          : cl==="triple" ? "#e57373"
+                          : v!==""        ? "var(--gray-100)"
+                          : "var(--white)",
+                        cursor:"pointer", padding:"0.2rem 0",
                       }}>
-                      <span style={{fontSize:"0.6rem",opacity:0.6}}>{i+1}</span>
-                      <span style={{fontSize:"1.1rem",fontWeight:700}}>{v!==""?v:""}</span>
-                      {strokes[i]>0 && <span style={{fontSize:"0.5rem",color:"var(--gold)"}}>{"•".repeat(strokes[i])}</span>}
+                      <span style={{fontSize:"0.55rem",opacity:0.5,lineHeight:1}}>{i+1}</span>
+                      <span style={{fontSize:"0.9rem",fontWeight:700,margin:"1px 0",
+                        color: cl==="triple"?"#fff":cl==="double"?"var(--red)":cl==="bogey"?"var(--red)":cl==="birdie"||cl==="eagle"?"var(--pine-deep)":"var(--gray-800)"
+                      }}>{v!==""?v:"·"}</span>
+                      {strokes[i]>0 && <span style={{fontSize:"0.45rem",color:"var(--copper)",lineHeight:1}}>{"●".repeat(strokes[i])}</span>}
                     </button>
                   );
                 })}
               </div>
+              {/* Hole strip — back 9 */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(9,1fr)",gap:"3px",marginBottom:"1rem"}}>
                 {Array.from({length:9},(_,i)=>{
                   const h = i+9;
@@ -246,14 +257,23 @@ export default function ScoreEntry({ onSave }) {
                     <button key={h} onClick={()=>setActiveHole(h)}
                       style={{
                         aspectRatio:"1", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-                        borderRadius:5, border: isActiveHole ? "3px solid var(--green-mid)" : "1px solid var(--gray-200)",
-                        background: cl==="eagle"?"#ffd700":cl==="birdie"?"var(--gold-light)":cl==="bogey"?"#fee2e2":cl==="double"?"var(--red)":v!==""?"var(--gray-100)":"var(--white)",
-                        color: cl==="double"?"#fff":"var(--gray-800)",
-                        cursor:"pointer", padding:0,
+                        borderRadius:5,
+                        border: isActiveHole ? "3px solid var(--pine-mid)" : "1px solid var(--gray-200)",
+                        background: isActiveHole ? "#f0f7f3"
+                          : cl==="eagle"  ? "#c8e6c9"
+                          : cl==="birdie" ? "#dcedc8"
+                          : cl==="bogey"  ? "#ffcdd2"
+                          : cl==="double" ? "#ef9a9a"
+                          : cl==="triple" ? "#e57373"
+                          : v!==""        ? "var(--gray-100)"
+                          : "var(--white)",
+                        cursor:"pointer", padding:"0.2rem 0",
                       }}>
-                      <span style={{fontSize:"0.6rem",opacity:0.6}}>{h+1}</span>
-                      <span style={{fontSize:"1.1rem",fontWeight:700}}>{v!==""?v:""}</span>
-                      {strokes[h]>0 && <span style={{fontSize:"0.5rem",color:"var(--gold)"}}>{"•".repeat(strokes[h])}</span>}
+                      <span style={{fontSize:"0.55rem",opacity:0.5,lineHeight:1}}>{h+1}</span>
+                      <span style={{fontSize:"0.9rem",fontWeight:700,margin:"1px 0",
+                        color: cl==="triple"?"#fff":cl==="double"?"var(--red)":cl==="bogey"?"var(--red)":cl==="birdie"||cl==="eagle"?"var(--pine-deep)":"var(--gray-800)"
+                      }}>{v!==""?v:"·"}</span>
+                      {strokes[h]>0 && <span style={{fontSize:"0.45rem",color:"var(--copper)",lineHeight:1}}>{"●".repeat(strokes[h])}</span>}
                     </button>
                   );
                 })}
@@ -372,22 +392,26 @@ export default function ScoreEntry({ onSave }) {
                     </tr>
                     {allFilled && totals && (
                       <tr>
-                        <td className="row-label" style={{color:"var(--green-mid)"}}>Net</td>
+                        <td className="row-label" style={{color:"var(--pine-mid)"}}>Net</td>
                         {Array.from({length:9},(_,i) => {
                           const gs = playerScores[i];
                           const net = gs - strokes[i];
                           const cl = scoreClass(net, course.par[i]);
-                          return <td key={i} className={cl} style={{fontSize:"0.75rem"}}>{net}</td>;
+                          return <td key={i} className={cl} style={{fontSize:"0.75rem",textAlign:"center",padding:"0.2rem"}}>
+                            <span className="score-mark">{net}</span>
+                          </td>;
                         })}
                         <td className="subtotal">{playerScores.slice(0,9).reduce((a,b)=>a+b,0)-strokes.slice(0,9).reduce((a,b)=>a+b,0)}</td>
                         {Array.from({length:9},(_,i) => {
                           const gs = playerScores[i+9];
                           const net = gs - strokes[i+9];
                           const cl = scoreClass(net, course.par[i+9]);
-                          return <td key={i+9} className={cl} style={{fontSize:"0.75rem"}}>{net}</td>;
+                          return <td key={i+9} className={cl} style={{fontSize:"0.75rem",textAlign:"center",padding:"0.2rem"}}>
+                            <span className="score-mark">{net}</span>
+                          </td>;
                         })}
                         <td className="subtotal">{playerScores.slice(9).reduce((a,b)=>a+b,0)-strokes.slice(9).reduce((a,b)=>a+b,0)}</td>
-                        <td className="subtotal" style={{color:"var(--gold)"}}>{totals.net}</td>
+                        <td className="subtotal" style={{color:"var(--copper)"}}>{totals.net}</td>
                       </tr>
                     )}
                   </tbody>

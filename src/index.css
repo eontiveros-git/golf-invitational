@@ -220,10 +220,79 @@ body {
 }
 .scorecard .par-row td { background: var(--gray-100); color: var(--gray-600); font-weight: 600; }
 .scorecard .subtotal { background: var(--pine-deep) !important; color: var(--copper-light) !important; font-weight: 700; }
-.scorecard .eagle  { background: #f0c040; color: #2a1800; }
-.scorecard .birdie { background: var(--copper-pale); color: var(--pine-deep); }
-.scorecard .bogey  { background: #fde8e8; color: var(--red); }
-.scorecard .double { background: var(--red); color: #fff; }
+.scorecard .eagle  { background: var(--white); }
+.scorecard .birdie { background: var(--white); }
+.scorecard .bogey  { background: var(--white); }
+.scorecard .double { background: var(--white); }
+.scorecard .triple { background: var(--white); }
+
+/* Base score-mark — quick entry tiles use color only, no borders */
+.score-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 1.5em;
+  min-height: 1.5em;
+  padding: 1px;
+}
+
+/* Scorecard table cells — proper golf notation with circles and squares */
+.scorecard .eagle  { background: var(--white); }
+.scorecard .birdie { background: var(--white); }
+.scorecard .bogey  { background: var(--white); }
+.scorecard .double { background: var(--white); }
+.scorecard .triple { background: var(--white); }
+
+.scorecard .eagle  .score-mark,
+.scorecard .birdie .score-mark,
+.scorecard .bogey  .score-mark,
+.scorecard .double .score-mark,
+.scorecard .triple .score-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 1.5em;
+  min-height: 1.5em;
+}
+/* Eagle: double circle */
+.scorecard .eagle .score-mark {
+  border: 1.5px solid var(--pine-mid);
+  border-radius: 50%;
+  outline: 1.5px solid var(--pine-mid);
+  outline-offset: 2px;
+  color: var(--pine-mid);
+}
+/* Birdie: single circle */
+.scorecard .birdie .score-mark {
+  border: 1.5px solid var(--pine-mid);
+  border-radius: 50%;
+  color: var(--pine-mid);
+}
+/* Bogey: single square */
+.scorecard .bogey .score-mark {
+  border: 1.5px solid var(--red);
+  border-radius: 2px;
+  color: var(--red);
+}
+/* Double bogey: double square */
+.scorecard .double .score-mark {
+  border: 1.5px solid var(--red);
+  border-radius: 2px;
+  outline: 1.5px solid var(--red);
+  outline-offset: 2px;
+  color: var(--red);
+}
+/* Triple+: filled square */
+.scorecard .triple .score-mark {
+  border: 1.5px solid var(--red);
+  border-radius: 2px;
+  background: var(--red);
+  color: #fff;
+}
 
 /* ── RYDER CUP BANNER ── */
 .rc-banner {

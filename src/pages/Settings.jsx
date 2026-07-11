@@ -235,9 +235,18 @@ export default function Settings({ onSave }) {
               <span className="badge">{isSingles?"6 Matches · 1 Pt Each":"3 Matches · 1 Pt Each"}</span>
             </div>
             <div className="card-body">
-              {matches.map((m,mi)=>{
-                const used=new Set(matches.filter((_,x)=>x!==mi).flatMap(mm=>[...(mm.team1||[]),...(mm.team2||[])]).filter(Boolean));
-                return(
+              {(() => {
+                const ov = courseOverrides[matchupCourse]||{};
+                const base = COURSES[matchupCourse];
+                const mcSlope  = ov.slope  ?? base.slope;
+                const mcRating = ov.rating ?? base.rating;
+                const mcPar    = (ov.par || base.par).reduce((a,b)=>a+b,0);
+                const chFor = id => courseHandicap(ghinForPlayer(id), mcSlope, mcRating, mcPar);
+                return (
+                  <>
+                  {matches.map((m,mi)=>{
+                    const used=new Set(matches.filter((_,x)=>x!==mi).flatMap(mm=>[...(mm.team1||[]),...(mm.team2||[])]).filter(Boolean));
+                    return (
                   <div key={mi} className="match-card">
                     <div className="match-card-header">
                       <span style={{fontWeight:700,fontSize:"var(--text-sm)",color:"var(--gray-600)",textTransform:"uppercase",letterSpacing:"0.04em"}}>Match {mi+1}</span>
@@ -248,10 +257,9 @@ export default function Settings({ onSave }) {
                         {(m.team1||[]).map((pid,si)=>(
                           <select key={si} className="form-select" value={pid||""} onChange={e=>setMatchupSlot(mi,"team1",si,e.target.value)}>
                             <option value="">— Select —</option>
-                            {team1Players.map(p=>{
-                              const ch=courseHandicap(ghinForPlayer(p.id),COURSES[matchupCourse].slope,COURSES[matchupCourse].rating,COURSES[matchupCourse].par.reduce((a,b)=>a+b,0));
-                              return <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>{p.name} (CH {ch})</option>;
-                            })}
+                            {team1Players.map(p=>(
+                              <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>{p.name} (CH {chFor(p.id)})</option>
+                            ))}
                           </select>
                         ))}
                       </div>
@@ -261,20 +269,22 @@ export default function Settings({ onSave }) {
                         {(m.team2||[]).map((pid,si)=>(
                           <select key={si} className="form-select" value={pid||""} onChange={e=>setMatchupSlot(mi,"team2",si,e.target.value)}>
                             <option value="">— Select —</option>
-                            {team2Players.map(p=>{
-                              const ch=courseHandicap(ghinForPlayer(p.id),COURSES[matchupCourse].slope,COURSES[matchupCourse].rating,COURSES[matchupCourse].par.reduce((a,b)=>a+b,0));
-                              return <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>{p.name} (CH {ch})</option>;
-                            })}
+                            {team2Players.map(p=>(
+                              <option key={p.id} value={p.id} disabled={used.has(p.id)&&pid!==p.id}>{p.name} (CH {chFor(p.id)})</option>
+                            ))}
                           </select>
                         ))}
                       </div>
                     </div>
                   </div>
+                    );
+                  })}
+                  <button className="btn btn-primary" style={{marginTop:"0.75rem"}} onClick={handleMatchSave}>
+                    {matchSaved?"✓ Saved":"Save Matchups"}
+                  </button>
+                  </>
                 );
-              })}
-              <button className="btn btn-primary" style={{marginTop:"0.75rem"}} onClick={handleMatchSave}>
-                {matchSaved?"✓ Saved":"Save Matchups"}
-              </button>
+              })()}
             </div>
           </div>
         </div>
@@ -457,7 +467,14 @@ export default function Settings({ onSave }) {
                       <td style={{fontWeight:600}}>{p.name}</td>
                       <td>{tNum?<span className={`tag tag-team${tNum}`}>{teamNames[tNum]}</span>:"—"}</td>
                       <td className="text-mono">{ghin}</td>
-                      {COURSE_KEYS.map(ck=><td key={ck} className="text-mono">{courseHandicap(ghin,COURSES[ck].slope,COURSES[ck].rating,COURSES[ck].par.reduce((a,b)=>a+b,0))}</td>)}
+                      {COURSE_KEYS.map(ck=>{
+                        const ov = courseOverrides[ck]||{};
+                        const base = COURSES[ck];
+                        const slope  = ov.slope  ?? base.slope;
+                        const rating = ov.rating ?? base.rating;
+                        const par    = (ov.par || base.par).reduce((a,b)=>a+b,0);
+                        return <td key={ck} className="text-mono">{courseHandicap(ghin,slope,rating,par)}</td>;
+                      })}
                     </tr>
                   );
                 })}

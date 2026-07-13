@@ -391,11 +391,26 @@ export default function Settings({ onSave }) {
                 {PRIZES.map(prize=>(
                   <div key={prize.id} style={{border:"1px solid var(--gray-200)",borderRadius:5,padding:"0.75rem"}}>
                     <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:"0.1rem"}}>{prize.label}</div>
-                    <div style={{fontSize:"var(--text-xs)",color:"var(--gold)",marginBottom:"0.4rem"}}>🏆 {prize.award}</div>
-                    {prize.id==="ryderCup"?(
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--copper)",marginBottom:"0.4rem"}}>🏆 {prize.award}</div>
+                    {prize.id==="ryderCup" ? (
                       <input className="form-input" style={{width:"100%"}} placeholder="e.g. Jeff, Chet, Alex…"
                         value={prizeWinners[prize.id]||""} onChange={e=>setPrizeWinners(prev=>({...prev,[prize.id]:e.target.value}))} />
-                    ):(
+                    ) : prize.id==="lowDaily" ? (
+                      // One dropdown per course day
+                      <div style={{display:"flex",flexDirection:"column",gap:"0.35rem"}}>
+                        {COURSE_KEYS.map(ck=>(
+                          <div key={ck} style={{display:"flex",alignItems:"center",gap:"0.5rem"}}>
+                            <span style={{fontSize:"var(--text-xs)",fontWeight:600,color:"var(--gray-600)",minWidth:60}}>{COURSES[ck].day.slice(0,3)}</span>
+                            <select className="form-select" style={{flex:1}}
+                              value={prizeWinners?.lowDaily?.[ck]||""}
+                              onChange={e=>setPrizeWinners(prev=>({...prev,lowDaily:{...(prev.lowDaily||{}),[ck]:e.target.value}}))}>
+                              <option value="">— No winner —</option>
+                              {PLAYERS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
                       <select className="form-select" style={{width:"100%"}} value={prizeWinners[prize.id]||""} onChange={e=>setPrizeWinners(prev=>({...prev,[prize.id]:e.target.value}))}>
                         <option value="">— Select winner —</option>
                         {PLAYERS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
@@ -413,14 +428,18 @@ export default function Settings({ onSave }) {
               <table className="leaderboard">
                 <thead><tr><th>Year</th><th>Low Gross</th><th>Low Net</th><th>Ryder Cup</th></tr></thead>
                 <tbody>
-                  {pastWinners.lowGross?.map((r,i)=>(
+                  {pastWinners.lowGross?.map((r)=>{
+                    const ln = pastWinners.lowNet?.find(x=>x.year===r.year);
+                    const rc = pastWinners.ryderCup?.find(x=>x.year===r.year);
+                    return (
                     <tr key={r.year} style={{background:r.year===TOURNAMENT.year?"#f0f7f3":""}}>
                       <td style={{fontWeight:700,fontFamily:"var(--font-mono)"}}>{r.year}</td>
                       <td style={{fontWeight:r.year===TOURNAMENT.year?700:400}}>{r.winner||<span style={{color:"var(--gray-400)"}}>TBD</span>} {r.score?<span style={{color:"var(--gray-400)",fontSize:"var(--text-xs)"}}>({r.score})</span>:""}</td>
-                      <td style={{fontWeight:r.year===TOURNAMENT.year?700:400}}>{pastWinners.lowNet?.[i]?.winner||<span style={{color:"var(--gray-400)"}}>TBD</span>} {pastWinners.lowNet?.[i]?.score?<span style={{color:"var(--gray-400)",fontSize:"var(--text-xs)"}}>({pastWinners.lowNet[i].score})</span>:""}</td>
-                      <td style={{fontWeight:r.year===TOURNAMENT.year?700:400}}>{pastWinners.ryderCup?.[i]?.winner||<span style={{color:"var(--gray-400)"}}>TBD</span>} {pastWinners.ryderCup?.[i]?.score?<span style={{color:"var(--gray-400)",fontSize:"var(--text-xs)"}}>({pastWinners.ryderCup[i].score})</span>:""}</td>
+                      <td style={{fontWeight:r.year===TOURNAMENT.year?700:400}}>{ln?.winner||<span style={{color:"var(--gray-400)"}}>TBD</span>} {ln?.score?<span style={{color:"var(--gray-400)",fontSize:"var(--text-xs)"}}>({ln.score})</span>:""}</td>
+                      <td style={{fontWeight:r.year===TOURNAMENT.year?700:400}}>{rc?.winner||<span style={{color:"var(--gray-400)"}}>—</span>} {rc?.score?<span style={{color:"var(--gray-400)",fontSize:"var(--text-xs)"}}>({rc.score})</span>:""}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

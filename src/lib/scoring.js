@@ -36,19 +36,34 @@ export function calcSkins(courseKey, roundsForCourse, ghinOverrides = {}, course
   return skins;
 }
 
+/** Split a whole-dollar pot across recipients with no cents left over.
+ *  Everyone gets floor(pot/n); the remainder is handed out $1 at a time
+ *  following the order of `recipients`. An id may appear more than once
+ *  (e.g. a player who won multiple skins) and accumulates correctly.
+ *  Returns { payouts: {id: $}, base, remainder }. */
+export function splitPot(pot, recipients) {
+  const payouts = {};
+  if (!recipients.length) return { payouts, base: 0, remainder: 0 };
+  const base = Math.floor(pot / recipients.length);
+  const remainder = pot - base * recipients.length;
+  recipients.forEach((id, i) => {
+    payouts[id] = (payouts[id] || 0) + base + (i < remainder ? 1 : 0);
+  });
+  return { payouts, base, remainder };
+}
+
 export function skinPayouts(courseKey, roundsForCourse, ghinOverrides = {}, courseOverrides = null) {
   const skins = calcSkins(courseKey, roundsForCourse, ghinOverrides, courseOverrides);
   const playerCount = roundsForCourse.length;
   const buyIn = 20; // per player
   const pot = buyIn * playerCount;
+  // calcSkins returns holes 1→18 in order, so wonSkins is already in hole order.
+  // The odd dollars go to the earliest skins on the card.
   const wonSkins = skins.filter(s => s.winnerId);
-  // Round down to nearest dollar — nobody pays cents on a golf trip
-  const perSkin = wonSkins.length > 0 ? Math.floor(pot / wonSkins.length) : 0;
+  const { payouts, base: perSkin, remainder } = splitPot(pot, wonSkins.map(s => s.winnerId));
 
-  // Gross winnings (what each player collects from the pot)
   const grossWinnings = {};
-  PLAYERS.forEach(p => (grossWinnings[p.id] = 0));
-  wonSkins.forEach(s => (grossWinnings[s.winnerId] = (grossWinnings[s.winnerId]||0) + perSkin));
+  PLAYERS.forEach(p => (grossWinnings[p.id] = payouts[p.id] || 0));
 
   // Net winnings = gross collected − own buy-in (only for players who participated)
   const netWinnings = {};
@@ -57,7 +72,7 @@ export function skinPayouts(courseKey, roundsForCourse, ghinOverrides = {}, cour
     netWinnings[r.playerId] = (grossWinnings[r.playerId]||0) - buyIn;
   });
 
-  return { skins, perSkin, totals: grossWinnings, netTotals: netWinnings };
+  return { skins, perSkin, remainder, totals: grossWinnings, netTotals: netWinnings };
 }
 
 export function dailyLowNet(courseKey, roundsForCourse, ghinOverrides = {}, courseOverrides = null) {
@@ -76,15 +91,16 @@ export function dailyLowNet(courseKey, roundsForCourse, ghinOverrides = {}, cour
   const second = secondNet !== undefined ? remaining.filter(r => r.net === secondNet) : [];
 
   // $10/player pot = $120 total. Split: $80 first, $40 second
-  const playerCount = roundsForCourse.length;
   const buyIn = 10; // per player per day
   const firstPrize = 80;
   const secondPrize = 40;
 
+  // Ties split their prize; odd dollars go to the lower gross score first
+  const { payouts: firstPay }  = splitPot(firstPrize,  first.map(r => r.playerId));
+  const { payouts: secondPay } = splitPot(secondPrize, second.map(r => r.playerId));
+
   const grossPayouts = {};
-  PLAYERS.forEach(p => (grossPayouts[p.id] = 0));
-  first.forEach(r  => (grossPayouts[r.playerId] += Math.floor(firstPrize/first.length)));
-  second.forEach(r => (grossPayouts[r.playerId] += Math.floor(secondPrize/second.length)));
+  PLAYERS.forEach(p => (grossPayouts[p.id] = (firstPay[p.id] || 0) + (secondPay[p.id] || 0)));
 
   // Net = gross collected − own buy-in
   const netPayouts = {};
@@ -217,24 +233,22 @@ export function calcSettlement(rounds, matchups, ctpWinners, ghinOverrides, roun
     players.forEach(p => { balance[p.id] += (netPayouts[p.id]||0); });
   });
 
-  // ── CTP: winner collects $60 pot ($5 × 12), losers each −$5 ─────────
+  // ── CTP: $5/player per par 3 hole. Collected upfront for all par 3s. ──
   COURSE_KEYS.forEach(ck => {
     const cr = roundsByCourse[ck] || [];
     if (!cr.length) return;
     const ctpForCourse = ctpWinners.filter(c => c.course_key === ck);
-    // Each par 3 is a separate pot
     const coursePar3Count = (getCourse(ck, courseOverrides).par || DEFAULT_COURSES[ck].par)
       .filter(p => p === 3).length;
-    const ctpWinnerIds = ctpForCourse.map(c => c.player_id);
 
-    // Every player who played that round paid $5 per par 3
+    // Every player pays $5 per par 3 on this course (collected upfront)
     cr.forEach(r => {
-      balance[r.playerId] -= 5 * ctpWinnerIds.filter(id => id).length; // $5 per settled CTP hole
+      balance[r.playerId] -= 5 * coursePar3Count;
     });
-    // CTP winners collect the pot
+    // CTP winners collect $5 × player count for their hole
     ctpForCourse.forEach(c => {
       if (c.player_id && balance[c.player_id] !== undefined) {
-        balance[c.player_id] += 5 * cr.length; // $5 from each player
+        balance[c.player_id] += 5 * cr.length;
       }
     });
   });

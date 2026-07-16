@@ -81,7 +81,7 @@ export default function Dashboard({ onNavigate }) {
     const course = courses[ck]||COURSES[ck];
     const cr = roundsByCourse[ck]||[];
     const gMap = grossByCoursePlayer[ck]||{};
-    const {skins,perSkin}=cr.length?skinPayouts(ck,cr,ghinOverrides,courses):{skins:[],perSkin:0};
+    const {skins,perSkin,remainder:skinRem,totals:skinTotals}=cr.length?skinPayouts(ck,cr,ghinOverrides,courses):{skins:[],perSkin:0,remainder:0,totals:{}};
     const wonSkins=skins.filter(s=>s.winnerId);
     const {first:dlnFirst,second:dlnSecond}=cr.length?dailyLowNet(ck,cr,ghinOverrides,courses):{first:[],second:[]};
     const courseMatchups=matchups.filter(m=>m.course_key===ck);
@@ -149,7 +149,7 @@ export default function Dashboard({ onNavigate }) {
             <div className="grid-2 mb-2">
               {/* Skins */}
               <div className="card">
-                <div className="card-header"><h2>Skins</h2><span className="badge">{wonSkins.length} won · ${Math.round(perSkin)}/skin</span></div>
+                <div className="card-header"><h2>Skins</h2><span className="badge">{wonSkins.length} won · ${perSkin}{skinRem>0?`–${perSkin+1}`:""}/skin</span></div>
                 <div className="card-body">
                   <div className="skins-grid" style={{marginBottom:"0.75rem"}}>
                     {skins.map(s=>(
@@ -169,7 +169,7 @@ export default function Dashboard({ onNavigate }) {
                             <tr key={p.id}>
                               <td style={{fontWeight:600}}>{p.name}</td>
                               <td className="text-mono">{wonSkins.filter(s=>s.winnerId===p.id).length}</td>
-                              <td className="prize">${wonSkins.filter(s=>s.winnerId===p.id).length*perSkin}</td>
+                              <td className="prize">${skinTotals[p.id]||0}</td>
                             </tr>
                           ))}
                       </tbody>

@@ -3,6 +3,7 @@ import { COURSES as DEFAULT_COURSES, COURSE_KEYS, courseHandicap, strokesPerHole
 import { getRounds, saveRound, deleteRound, getSettings, getCtpWinners, saveCtpWinner } from "../lib/supabase";
 import { getRoundTotals } from "../lib/scoring";
 import { useAppData } from "../lib/useAppData";
+import { ConfirmDialog, Toast } from "../components/Confirm";
 
 function scoreClass(score, par) {
   const d = score - par;
@@ -28,6 +29,8 @@ export default function ScoreEntry({ onSave }) {
   const [activeHole, setActiveHole] = useState(0);
   const [flashSaved, setFlashSaved] = useState(false);
   const [ctpWinners, setCtpWinners] = useState([]);
+  const [confirmDelete, setConfirmDelete] = useState(null); // playerId pending removal
+  const [toast, setToast] = useState("");
   const saveTimer = useRef(null);
 
   const course = (courses && courses[courseKey]) || DEFAULT_COURSES[courseKey];
@@ -105,7 +108,7 @@ export default function ScoreEntry({ onSave }) {
   async function handleSaveFull(pid) {
     const arr = scores[pid];
     if (!arr || arr.some(v => v === null || v === undefined || isNaN(v))) {
-      alert("Please enter all 18 scores before saving.");
+      setToast("Enter all 18 scores before saving.");
       return;
     }
     setSaving(pid);
@@ -116,10 +119,11 @@ export default function ScoreEntry({ onSave }) {
   }
 
   async function handleDelete(pid) {
-    if (!confirm(`Remove ${players.find(p=>p.id===pid)?.name}'s ${course.name} round?`)) return;
     await deleteRound(courseKey, pid);
     setScores(prev => { const n={...prev}; delete n[pid]; return n; });
     setSaved(prev => { const n={...prev}; delete n[pid]; return n; });
+    setConfirmDelete(null);
+    setToast(`${players.find(p=>p.id===pid)?.name}'s round removed.`);
     onSave?.();
   }
 
@@ -317,7 +321,7 @@ export default function ScoreEntry({ onSave }) {
 
               {saving===activePlayer && <p style={{fontSize:"0.78rem",color:"var(--gray-400)",marginTop:"0.5rem"}}>Saving…</p>}
               {saved[activePlayer] && (
-                <button className="btn btn-ghost btn-sm" style={{marginTop:"0.75rem"}} onClick={()=>handleDelete(activePlayer)}>Remove round</button>
+                <button className="btn btn-ghost btn-sm" style={{marginTop:"0.75rem"}} onClick={()=>setConfirmDelete(activePlayer)}>Remove round</button>
               )}
             </div>
           )}
@@ -425,7 +429,7 @@ export default function ScoreEntry({ onSave }) {
                   {saving===activePlayer ? "Saving…" : saved[activePlayer] ? "✓ Saved" : "Save Scores"}
                 </button>
                 {saved[activePlayer] && (
-                  <button className="btn btn-ghost btn-sm" onClick={()=>handleDelete(activePlayer)}>Remove</button>
+                  <button className="btn btn-ghost btn-sm" onClick={()=>setConfirmDelete(activePlayer)}>Remove</button>
                 )}
               </div>
             </>
@@ -506,6 +510,18 @@ export default function ScoreEntry({ onSave }) {
           </div>
         );
       })()}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Remove round"
+        message={confirmDelete
+          ? `Remove ${players.find(p=>p.id===confirmDelete)?.name}'s ${course.name} round? Their scores for this course will be deleted.`
+          : ""}
+        confirmLabel="Remove"
+        onConfirm={()=>handleDelete(confirmDelete)}
+        onCancel={()=>setConfirmDelete(null)}
+      />
+      <Toast message={toast} onDone={()=>setToast("")} />
     </div>
   );
 }

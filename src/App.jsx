@@ -3,7 +3,7 @@ import Dashboard from "./pages/Dashboard";
 import ScoreEntry from "./pages/ScoreEntry";
 import Settlement from "./pages/Settlement";
 import Export from "./pages/Export";
-import Settings from "./pages/Settings";
+import Admin from "./pages/Admin";
 import { TOURNAMENT } from "./lib/gameData";
 import "./index.css";
 
@@ -12,7 +12,7 @@ const TABS = [
   { id: "scores",     label: "Enter Scores" },
   { id: "settlement", label: "Settlement" },
   { id: "export",     label: "Export" },
-  { id: "settings",   label: "Settings" },
+  { id: "admin",      label: "Admin" },
 ];
 
 export default function App() {
@@ -40,7 +40,7 @@ export default function App() {
         {tab==="scores"     && <ScoreEntry onSave={bump} />}
         {tab==="settlement" && <Settlement key={refresh} />}
         {tab==="export"     && <Export />}
-        {tab==="settings"   && <Settings   onSave={bump} />}
+        {tab==="admin"      && <Admin      onSave={bump} />}
       </main>
     </div>
   );

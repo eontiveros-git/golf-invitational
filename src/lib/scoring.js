@@ -1,4 +1,4 @@
-import { COURSES as DEFAULT_COURSES, PLAYERS, courseHandicap, strokesPerHole, playerMap } from "./gameData";
+import { COURSES as DEFAULT_COURSES, COURSE_KEYS, PLAYERS, courseHandicap, strokesPerHole, playerMap } from "./gameData";
 
 function getCourse(courseKey, courseOverrides) {
   return (courseOverrides && courseOverrides[courseKey]) || DEFAULT_COURSES[courseKey];
@@ -112,6 +112,35 @@ export function dailyLowNet(courseKey, roundsForCourse, ghinOverrides = {}, cour
   return { first, second, payouts: grossPayouts, netPayouts };
 }
 
+/** Gross nightly payouts for one course — the cash the organizer physically
+ *  hands out that evening. Buy-ins are collected upfront ($265/player), so
+ *  these are GROSS, not net of buy-in.
+ *  Returns { playerId: { skins, lowNet, ctp, total } } for players with scores. */
+export function getDayPayouts(courseKey, roundsByCourse, ctpWinners, ghinOverrides = {}, courseOverrides = null) {
+  const cr = roundsByCourse[courseKey] || [];
+  if (!cr.length) return {};
+
+  const { totals: skinGross } = skinPayouts(courseKey, cr, ghinOverrides, courseOverrides);
+  const { payouts: lnGross }  = dailyLowNet(courseKey, cr, ghinOverrides, courseOverrides);
+
+  // Each par 3's CTP winner collects $5 from everyone in the field
+  const ctpGross = {};
+  cr.forEach(r => { ctpGross[r.playerId] = 0; });
+  (ctpWinners || []).filter(c => c.course_key === courseKey).forEach(c => {
+    if (!c.player_id) return;
+    ctpGross[c.player_id] = (ctpGross[c.player_id] || 0) + 5 * cr.length;
+  });
+
+  const result = {};
+  cr.forEach(r => {
+    const skins  = Math.round(skinGross[r.playerId] || 0);
+    const lowNet = Math.round(lnGross[r.playerId]   || 0);
+    const ctp    = Math.round(ctpGross[r.playerId]  || 0);
+    result[r.playerId] = { skins, lowNet, ctp, total: skins + lowNet + ctp };
+  });
+  return result;
+}
+
 function closeoutResult(holeResults, sideAKey, sideBKey) {
   let margin = 0, decidedAtHole = null, decidedMargin = 0;
   for (let i = 0; i < holeResults.length; i++) {
@@ -208,7 +237,6 @@ export function overallStandings(rounds, ghinOverrides = {}, courseOverrides = n
 }
 
 export function calcSettlement(rounds, matchups, ctpWinners, ghinOverrides, roundsByCourse, grossByCoursePlayer, players, courseOverrides = null) {
-  const COURSE_KEYS = ["bearDance","redSky","lakota","frostCreek"];
 
   // balance tracks each player's NET position:
   // positive = they are owed money, negative = they owe money
@@ -318,4 +346,115 @@ export function calcSettlement(rounds, matchups, ctpWinners, ghinOverrides, roun
   }
 
   return { balance, transactions };
+}
+
+
+// ── Ryder Cup ─────────────────────────────────────────────────────────────
+/** Ryder Cup team points + MVP points from matchups.
+ *  Single source of truth — Dashboard, Settlement and prizes all call this. */
+export function computeRyderCup(matchups, grossByCoursePlayer, players, ghinOverrides = {}, courseOverrides = null) {
+  let team1 = 0, team2 = 0;
+  const mvpPoints = {};
+  players.forEach(p => (mvpPoints[p.id] = 0));
+
+  (matchups || []).forEach(m => {
+    const gMap = grossByCoursePlayer[m.course_key] || {};
+    const isSingles = m.course_key === "frostCreek";
+    const t1 = m.team1_players || [], t2 = m.team2_players || [];
+
+    if (isSingles && t1[0] && t2[0] && gMap[t1[0]] && gMap[t2[0]]) {
+      const r = calcSingles(m.course_key, t1[0], t2[0], gMap, ghinOverrides, courseOverrides);
+      team1 += r.rcPoints[t1[0]] || 0;
+      team2 += r.rcPoints[t2[0]] || 0;
+      [t1[0], t2[0]].forEach(id => { mvpPoints[id] += r.rcPoints[id] || 0; });
+    } else if (!isSingles && t1.length === 2 && t2.length === 2 && (t1.some(id => gMap[id]) || t2.some(id => gMap[id]))) {
+      const r = calcBestBall(m.course_key, t1, t2, gMap, ghinOverrides, courseOverrides);
+      team1 += r.rcPoints.team1;
+      team2 += r.rcPoints.team2;
+      // Best ball is a team result — split the point between the pair for MVP
+      t1.forEach(id => { mvpPoints[id] += r.rcPoints.team1 / 2; });
+      t2.forEach(id => { mvpPoints[id] += r.rcPoints.team2 / 2; });
+    }
+  });
+
+  const winner = team1 > team2 ? 1 : team2 > team1 ? 2 : null;
+  const maxMvp = Math.max(0, ...Object.values(mvpPoints));
+  const mvpWinners = maxMvp > 0 ? players.filter(p => mvpPoints[p.id] === maxMvp).map(p => p.id) : [];
+
+  return { team1, team2, winner, mvpPoints, maxMvp, mvpWinners };
+}
+
+// ── Prizes ────────────────────────────────────────────────────────────────
+const fmtPts = n => (n % 1 === 0 ? String(n) : n.toFixed(1));
+
+/** Compute every trophy from the scores. Ties return every player tied.
+ *  Overall prizes only compare players on the same number of rounds, so the
+ *  standings stay fair mid-trip. */
+export function computePrizes(rounds, matchups, roundsByCourse, grossByCoursePlayer, players, ghinOverrides = {}, courseOverrides = null) {
+  const out = {
+    lowGross: [], lowNet: [], highNet: [],
+    ryderCup: { winner: null, playerIds: [], score: "", team1: 0, team2: 0 },
+    ryderMvp: [], maxMvp: 0,
+    lowDaily: {},
+    mashie: { net: null, winners: [] },
+    roundsComplete: 0,
+  };
+
+  // ── Overall gross / net ──
+  const standings = overallStandings(rounds, ghinOverrides, courseOverrides).filter(s => s.rounds > 0);
+  if (standings.length) {
+    // Only compare players who've played the same number of rounds — otherwise
+    // someone who skipped a day would "win" low gross on a smaller total.
+    const maxRounds = Math.max(...standings.map(s => s.rounds));
+    const eligible = standings.filter(s => s.rounds === maxRounds);
+    out.roundsComplete = maxRounds;
+
+    const minGross = Math.min(...eligible.map(s => s.totalGross));
+    out.lowGross = eligible.filter(s => s.totalGross === minGross).map(s => s.playerId);
+    out.lowGrossScore = minGross;
+
+    const minNet = Math.min(...eligible.map(s => s.totalNet));
+    out.lowNet = eligible.filter(s => s.totalNet === minNet).map(s => s.playerId);
+    out.lowNetScore = minNet;
+
+    const maxNet = Math.max(...eligible.map(s => s.totalNet));
+    out.highNet = eligible.filter(s => s.totalNet === maxNet).map(s => s.playerId);
+    out.highNetScore = maxNet;
+  }
+
+  // ── Ryder Cup + MVP ──
+  const rc = computeRyderCup(matchups, grossByCoursePlayer, players, ghinOverrides, courseOverrides);
+  out.ryderCup = {
+    winner: rc.winner,
+    playerIds: rc.winner ? players.filter(p => p.team === rc.winner).map(p => p.id) : [],
+    score: (rc.team1 || rc.team2) ? `${fmtPts(rc.team1)} to ${fmtPts(rc.team2)}` : "",
+    team1: rc.team1,
+    team2: rc.team2,
+  };
+  out.ryderMvp = rc.mvpWinners;
+  out.maxMvp = rc.maxMvp;
+  out.mvpPoints = rc.mvpPoints;
+
+  // ── Low daily round — same winners as the $80 daily low net ──
+  COURSE_KEYS.forEach(ck => {
+    const cr = roundsByCourse[ck] || [];
+    if (!cr.length) return;
+    const { first } = dailyLowNet(ck, cr, ghinOverrides, courseOverrides);
+    out.lowDaily[ck] = first.map(r => r.playerId);
+  });
+
+  // ── 1920 Mashie — lowest single net round of the trip ──
+  const netRounds = [];
+  (rounds || []).forEach(r => {
+    if (!r.gross_scores || r.gross_scores.length !== 18) return;
+    if (r.gross_scores.some(v => v == null || isNaN(v))) return;
+    const t = getRoundTotals(r.course_key, r.player_id, r.gross_scores, ghinOverrides, courseOverrides);
+    netRounds.push({ playerId: r.player_id, courseKey: r.course_key, net: t.net });
+  });
+  if (netRounds.length) {
+    const best = Math.min(...netRounds.map(r => r.net));
+    out.mashie = { net: best, winners: netRounds.filter(r => r.net === best) };
+  }
+
+  return out;
 }

@@ -1,40 +1,12 @@
 import { useState } from "react";
 import { useAppData } from "../lib/useAppData";
-import { COURSES, COURSE_KEYS, COURSES as DEFAULT_COURSES } from "../lib/gameData";
-import { skinPayouts, dailyLowNet, calcBestBall, calcSingles, splitPot } from "../lib/scoring";
+import { COURSES, COURSE_KEYS } from "../lib/gameData";
+import { skinPayouts, splitPot, getDayPayouts, computeRyderCup } from "../lib/scoring";
 import { upsertPayment } from "../lib/supabase";
 
 const PLAYER_COUNT = 12;
 const BUY_IN = 265;
 const TOTAL_POT = PLAYER_COUNT * BUY_IN; // $3,180
-
-// ── Compute nightly payouts for one course ────────────────────────────────
-// Buy-ins were collected upfront, so nightly payouts are GROSS —
-// the cash the organizer physically hands over that evening.
-function getDayPayouts(ck, roundsByCourse, ctpWinners, ghinOverrides, courses) {
-  const cr = roundsByCourse[ck] || [];
-  if (!cr.length) return {};
-
-  const { totals: skinGross } = skinPayouts(ck, cr, ghinOverrides, courses);
-  const { payouts: lnGross  } = dailyLowNet(ck, cr, ghinOverrides, courses);
-
-  // CTP — winner of each par 3 collects $5 from every player in the field
-  const ctpGross = {};
-  cr.forEach(r => { ctpGross[r.playerId] = 0; });
-  ctpWinners.filter(c => c.course_key === ck).forEach(c => {
-    if (!c.player_id) return;
-    ctpGross[c.player_id] = (ctpGross[c.player_id] || 0) + 5 * cr.length;
-  });
-
-  const result = {};
-  cr.forEach(r => {
-    const skins  = Math.round(skinGross[r.playerId] || 0);
-    const lowNet = Math.round(lnGross[r.playerId]   || 0);
-    const ctp    = Math.round(ctpGross[r.playerId]  || 0);
-    result[r.playerId] = { skins, lowNet, ctp, total: skins + lowNet + ctp };
-  });
-  return result;
-}
 
 // ── Single day card ───────────────────────────────────────────────────────
 function DayCard({ ck, dayPayouts, players, dailyPayments, onTogglePaid, defaultOpen, skinCount, perSkin, skinRemainder }) {
@@ -190,30 +162,15 @@ export default function Settlement() {
     sum + Object.values(dayPayouts[ck]).filter(d => d.total > 0).reduce((s, d) => s + d.total, 0), 0
   );
 
-  // RC + MVP
-  let rc1 = 0, rc2 = 0;
-  const mvpPts = {};
-  players.forEach(p => (mvpPts[p.id] = 0));
-  matchups.forEach(m => {
-    const gMap = grossByCoursePlayer[m.course_key] || {};
-    const isSingles = m.course_key === "frostCreek";
-    const t1 = m.team1_players || [], t2 = m.team2_players || [];
-    if (isSingles && t1[0] && t2[0] && gMap[t1[0]] && gMap[t2[0]]) {
-      const r = calcSingles(m.course_key, t1[0], t2[0], gMap, ghinOverrides, courses);
-      rc1 += r.rcPoints[t1[0]] || 0; rc2 += r.rcPoints[t2[0]] || 0;
-      [t1[0], t2[0]].forEach(id => { mvpPts[id] += r.rcPoints[id] || 0; });
-    } else if (!isSingles && t1.length === 2 && t2.length === 2 && (t1.some(id => gMap[id]) || t2.some(id => gMap[id]))) {
-      const r = calcBestBall(m.course_key, t1, t2, gMap, ghinOverrides, courses);
-      rc1 += r.rcPoints.team1; rc2 += r.rcPoints.team2;
-      t1.forEach(id => { mvpPts[id] += r.rcPoints.team1 / 2; });
-      t2.forEach(id => { mvpPts[id] += r.rcPoints.team2 / 2; });
-    }
-  });
-  const rcWinner  = rc1 > rc2 ? 1 : rc2 > rc1 ? 2 : null;
+  // RC + MVP — shared helper, same numbers as the Dashboard
+  const rc = computeRyderCup(matchups, grossByCoursePlayer, players, ghinOverrides, courses);
+  const rc1 = rc.team1, rc2 = rc.team2;
+  const mvpPts = rc.mvpPoints;
+  const rcWinner  = rc.winner;
   const rcWinners = rcWinner ? players.filter(p => p.team === rcWinner) : [];
   const { payouts: rcPay } = splitPot(600, rcWinners.map(p => p.id));
-  const maxMvp    = Math.max(0, ...Object.values(mvpPts));
-  const mvpWinners = maxMvp > 0 ? players.filter(p => mvpPts[p.id] === maxMvp) : [];
+  const maxMvp = rc.maxMvp;
+  const mvpWinners = rc.mvpWinners.map(id => players.find(p => p.id === id)).filter(Boolean);
   const { payouts: mvpPay } = splitPot(120, mvpWinners.map(p => p.id));
   const allRoundsIn = roundsPlayed.length === 4;
 

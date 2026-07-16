@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useAppData } from "../lib/useAppData";
-import { COURSES, COURSE_KEYS, courseHandicap } from "../lib/gameData";
-import { overallStandings, skinPayouts, dailyLowNet, calcBestBall, calcSingles, getRoundTotals } from "../lib/scoring";
+import { COURSES, COURSE_KEYS, courseHandicap, PRIZES, PAST_WINNERS, TOURNAMENT } from "../lib/gameData";
+import PastChampions from "../components/PastChampions";
+import { overallStandings, skinPayouts, dailyLowNet, calcBestBall, calcSingles, getRoundTotals, getDayPayouts, computeRyderCup, computePrizes } from "../lib/scoring";
+import { resolvePrizes } from "../lib/prizes";
 
 function toPar(n) {
   if (n===0) return <span style={{color:"var(--gray-600)"}}>E</span>;
@@ -16,7 +18,7 @@ function fmtMoney(n) {
 }
 
 export default function Dashboard({ onNavigate }) {
-  const { rounds, matchups, ctpWinners, loading, ghinOverrides, roundsByCourse, grossByCoursePlayer, teams, players, courses } = useAppData();
+  const { rounds, matchups, ctpWinners, loading, ghinOverrides, roundsByCourse, grossByCoursePlayer, teams, players, courses, settings } = useAppData();
   const [sortBy, setSortBy] = useState("net");
   const [resultsTab, setResultsTab] = useState(null); // null = overview, else courseKey
 
@@ -24,47 +26,26 @@ export default function Dashboard({ onNavigate }) {
 
   const pName = id => players.find(p=>p.id===id)?.name ?? id;
 
-  // ── Ryder Cup ──────────────────────────────────────────────────────────
-  let rcTeam1=0, rcTeam2=0;
-  const mvpPoints = {};
-  players.forEach(p=>(mvpPoints[p.id]=0));
-  matchups.forEach(m => {
-    const gMap = grossByCoursePlayer[m.course_key]||{};
-    const isSingles = m.course_key==="frostCreek";
-    const t1=m.team1_players||[], t2=m.team2_players||[];
-    if (isSingles&&t1[0]&&t2[0]&&gMap[t1[0]]&&gMap[t2[0]]) {
-      const r=calcSingles(m.course_key,t1[0],t2[0],gMap,ghinOverrides,courses);
-      rcTeam1+=(r.rcPoints[t1[0]]||0); rcTeam2+=(r.rcPoints[t2[0]]||0);
-      [t1[0],t2[0]].forEach(id=>{mvpPoints[id]+=(r.rcPoints[id]||0);});
-    } else if (!isSingles&&t1.length===2&&t2.length===2&&(t1.some(id=>gMap[id])||t2.some(id=>gMap[id]))) {
-      const r=calcBestBall(m.course_key,t1,t2,gMap,ghinOverrides,courses);
-      rcTeam1+=r.rcPoints.team1; rcTeam2+=r.rcPoints.team2;
-      t1.forEach(id=>{mvpPoints[id]+=r.rcPoints.team1/2;});
-      t2.forEach(id=>{mvpPoints[id]+=r.rcPoints.team2/2;});
-    }
-  });
-  const maxMvp = Math.max(0,...Object.values(mvpPoints));
-  const mvpPlayers = maxMvp>0 ? players.filter(p=>mvpPoints[p.id]===maxMvp) : [];
+  // Champions — fall back to defaults if nothing saved or shape is wrong
+  const prizeWinners = settings?.prize_winners || {};
+  const pastWinners  = settings?.past_winners?.lowGross?.length ? settings.past_winners : PAST_WINNERS;
 
-  // ── Money (net nightly pots only) ──────────────────────────────────────
+  // ── Ryder Cup ──────────────────────────────────────────────────────────
+  const rc = computeRyderCup(matchups, grossByCoursePlayer, players, ghinOverrides, courses);
+  const rcTeam1 = rc.team1, rcTeam2 = rc.team2;
+  const maxMvp = rc.maxMvp;
+  const mvpPlayers = rc.mvpWinners.map(id => players.find(p => p.id === id)).filter(Boolean);
+
+  // ── Money — gross cash paid out nightly ──────────────────────────────────────
   const dailyMoney = {};
   players.forEach(p=>{dailyMoney[p.id]={total:0};COURSE_KEYS.forEach(ck=>{dailyMoney[p.id][ck]=0;});});
   COURSE_KEYS.forEach(ck=>{
-    const cr=roundsByCourse[ck]||[];
-    if(!cr.length) return;
-    const {netTotals:skinNet}=skinPayouts(ck,cr,ghinOverrides,courses);
-    const {netPayouts:lnNet}=dailyLowNet(ck,cr,ghinOverrides,courses);
-    const ctpNet={};
-    cr.forEach(r=>(ctpNet[r.playerId]=0));
-    ctpWinners.filter(c=>c.course_key===ck).forEach(c=>{
-      if(!c.player_id) return;
-      cr.forEach(r=>{ctpNet[r.playerId]=(ctpNet[r.playerId]||0)-5;});
-      ctpNet[c.player_id]=(ctpNet[c.player_id]||0)+5*cr.length;
-    });
-    players.forEach(p=>{
-      const amt=(skinNet[p.id]||0)+(lnNet[p.id]||0)+(ctpNet[p.id]||0);
-      dailyMoney[p.id][ck]+=amt;
-      dailyMoney[p.id].total+=amt;
+    // Same helper the Settlement page uses — gross cash paid out that night
+    const dp = getDayPayouts(ck, roundsByCourse, ctpWinners, ghinOverrides, courses);
+    Object.entries(dp).forEach(([pid, d]) => {
+      if (!dailyMoney[pid]) return;
+      dailyMoney[pid][ck] += d.total;
+      dailyMoney[pid].total += d.total;
     });
   });
 
@@ -344,7 +325,7 @@ export default function Dashboard({ onNavigate }) {
 
         {/* Money */}
         <div className="card">
-          <div className="card-header"><h2>Money Won</h2><span className="badge">Net · Skins + LN + CTP</span></div>
+          <div className="card-header"><h2>Money Won</h2><span className="badge">Skins + LN + CTP</span></div>
           <div className="card-body" style={{padding:0,overflowX:"auto"}}>
             <table className="leaderboard" style={{minWidth:360}}>
               <thead><tr>
@@ -355,22 +336,26 @@ export default function Dashboard({ onNavigate }) {
               <tbody>
                 {players.map(p=>({p,total:Math.round(dailyMoney[p.id]?.total||0)}))
                   .sort((a,b)=>b.total-a.total)
-                  .map(({p})=>(
+                  .map(({p,total})=>(
                     <tr key={p.id}>
                       <td style={{fontWeight:600}}>{p.name}</td>
                       {roundsPlayed.map(ck=>{
                         const v=Math.round(dailyMoney[p.id]?.[ck]||0);
-                        return <td key={ck} className="text-mono" style={{textAlign:"center",color:v>0?"var(--green-mid)":v<0?"var(--red)":"var(--gray-300)"}}>
-                          {v>0?`+$${v}`:v<0?`-$${Math.abs(v)}`:"—"}
+                        return <td key={ck} className="text-mono" style={{textAlign:"center",color:v>0?"var(--pine-mid)":"var(--gray-300)"}}>
+                          {v>0?`$${v}`:"—"}
                         </td>;
                       })}
-                      <td style={{textAlign:"right",fontFamily:"var(--font-mono)",fontWeight:700}}>
-                        {fmtMoney(Math.round(dailyMoney[p.id]?.total||0))}
+                      <td style={{textAlign:"right",fontFamily:"var(--font-mono)",fontWeight:700,
+                        color:total>0?"var(--pine-mid)":"var(--gray-400)"}}>
+                        {total>0?`$${total}`:"—"}
                       </td>
                     </tr>
                   ))}
               </tbody>
             </table>
+          </div>
+          <div style={{padding:"0.5rem 1rem",background:"var(--gray-100)",fontSize:"var(--text-xs)",color:"var(--gray-600)",borderTop:"1px solid var(--gray-200)"}}>
+            Cash paid out each night. Ryder Cup and MVP settle Sunday.
           </div>
         </div>
       </div>
@@ -405,7 +390,7 @@ export default function Dashboard({ onNavigate }) {
 
       {/* CTP */}
       {ctpWinners.length>0&&(
-        <div className="card">
+        <div className="card mb-3">
           <div className="card-header"><h2>Closest to Pin</h2></div>
           <div className="card-body">
             <div className="ctp-grid">
@@ -422,6 +407,47 @@ export default function Dashboard({ onNavigate }) {
           </div>
         </div>
       )}
+
+      {/* Champions — trophy case, computed from the scores */}
+      {(() => {
+        const computed = computePrizes(rounds, matchups, roundsByCourse, grossByCoursePlayer, players, ghinOverrides, courses);
+        const rows = resolvePrizes(computed, prizeWinners, players, teams).filter(r => r.value);
+        const allIn = roundsPlayed.length === 4;
+        if (!rows.length) return null;
+        return (
+          <div className="card">
+            <div className="card-header">
+              <h2>Champions</h2>
+              <span className="badge" style={allIn ? undefined : {background:"var(--slate-mid)"}}>
+                {allIn ? `${TOURNAMENT.year} · Final` : `Projected · ${roundsPlayed.length}/4 rounds`}
+              </span>
+            </div>
+            <div className="card-body" style={{borderBottom:"1px solid var(--gray-200)"}}>
+              {!allIn && (
+                <p style={{fontSize:"var(--text-xs)",color:"var(--gray-400)",marginBottom:"0.75rem",fontStyle:"italic"}}>
+                  Based on rounds entered so far — final after Frost Creek.
+                </p>
+              )}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:"0.5rem"}}>
+                {rows.map(({prize, value, detail, isOverride}) => (
+                  <div key={prize.id} style={{border:"1px solid var(--copper)",borderRadius:5,padding:"0.6rem 0.75rem",background:"var(--copper-pale)"}}>
+                    <div className="ctp-label">{prize.label}</div>
+                    <div style={{fontWeight:700,fontSize:"var(--text-base)",color:"var(--pine-deep)",margin:"0.15rem 0"}}>
+                      🏆 {value}
+                      {isOverride && <span title="Set manually in Admin" style={{marginLeft:"0.3rem",fontSize:"var(--text-xs)",color:"var(--gray-400)",fontWeight:400}}>✎</span>}
+                    </div>
+                    {detail && <div style={{fontSize:"var(--text-xs)",color:"var(--gray-600)",fontFamily:"var(--font-mono)"}}>{detail}</div>}
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--gray-600)",marginTop:"0.2rem"}}>{prize.award}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="card-body" style={{padding:0}}>
+              <PastChampions pastWinners={pastWinners} />
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

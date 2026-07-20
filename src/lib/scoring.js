@@ -166,13 +166,32 @@ function closeoutResult(holeResults, sideAKey, sideBKey) {
   return { isFinal: false, label: `${Math.abs(margin)} up thru ${playedHoles}`, margin };
 }
 
-export function calcBestBall(courseKey, team1Ids, team2Ids, roundsMap, ghinOverrides = {}, courseOverrides = null) {
+/** Match-play handicaps for one match: everyone plays off the LOW course
+ *  handicap in the group, so the low man is scratch and the rest get the
+ *  difference. Returns { fullCH, matchH, low } keyed by playerId.
+ *  `overrides` (optional) is { playerId: matchStrokes } and wins when present —
+ *  for the hand-adjusted cases a pure formula can't reproduce. */
+export function matchHandicaps(courseKey, ids, ghinOverrides = {}, courseOverrides = null, overrides = {}) {
   const course = getCourse(courseKey, courseOverrides);
   const pmap = playerMap(ghinOverrides);
+  const par = course.par.reduce((a,b)=>a+b,0);
+  const fullCH = {};
+  ids.forEach(id => { fullCH[id] = courseHandicap(pmap[id].ghin, course.slope, course.rating, par); });
+  const low = Math.min(...ids.map(id => fullCH[id]));
+  const matchH = {};
+  ids.forEach(id => {
+    matchH[id] = (overrides[id] !== undefined && overrides[id] !== "" && overrides[id] !== null)
+      ? Number(overrides[id])
+      : fullCH[id] - low;
+  });
+  return { fullCH, matchH, low };
+}
+
+export function calcBestBall(courseKey, team1Ids, team2Ids, roundsMap, ghinOverrides = {}, courseOverrides = null, matchOverrides = {}) {
+  const course = getCourse(courseKey, courseOverrides);
   const allIds = [...team1Ids, ...team2Ids];
-  const hdcps = Object.fromEntries(allIds.map(id => [id, courseHandicap(pmap[id].ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0))]));
-  const minHdcp = Math.min(...allIds.map(id => hdcps[id]));
-  const strokes = Object.fromEntries(allIds.map(id => [id, strokesPerHole(hdcps[id]-minHdcp, course.hdcp)]));
+  const { matchH } = matchHandicaps(courseKey, allIds, ghinOverrides, courseOverrides, matchOverrides);
+  const strokes = Object.fromEntries(allIds.map(id => [id, strokesPerHole(matchH[id], course.hdcp)]));
 
   const holes = [];
   let t1Pts=0, t2Pts=0;
@@ -195,14 +214,11 @@ export function calcBestBall(courseKey, team1Ids, team2Ids, roundsMap, ghinOverr
   return { holes, holeWins:{team1:t1Pts, team2:t2Pts}, rcPoints:{team1:rc1, team2:rc2}, matchPlay };
 }
 
-export function calcSingles(courseKey, p1Id, p2Id, roundsMap, ghinOverrides = {}, courseOverrides = null) {
+export function calcSingles(courseKey, p1Id, p2Id, roundsMap, ghinOverrides = {}, courseOverrides = null, matchOverrides = {}) {
   const course = getCourse(courseKey, courseOverrides);
-  const pmap = playerMap(ghinOverrides);
-  const h1 = courseHandicap(pmap[p1Id].ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0));
-  const h2 = courseHandicap(pmap[p2Id].ghin, course.slope, course.rating, course.par.reduce((a,b)=>a+b,0));
-  const min = Math.min(h1, h2);
-  const s1 = strokesPerHole(h1-min, course.hdcp);
-  const s2 = strokesPerHole(h2-min, course.hdcp);
+  const { matchH } = matchHandicaps(courseKey, [p1Id, p2Id], ghinOverrides, courseOverrides, matchOverrides);
+  const s1 = strokesPerHole(matchH[p1Id], course.hdcp);
+  const s2 = strokesPerHole(matchH[p2Id], course.hdcp);
 
   const holes = [];
   let p1Pts=0, p2Pts=0;
@@ -362,13 +378,14 @@ export function computeRyderCup(matchups, grossByCoursePlayer, players, ghinOver
     const isSingles = m.course_key === "frostCreek";
     const t1 = m.team1_players || [], t2 = m.team2_players || [];
 
+    const mh = m.match_handicaps || {};
     if (isSingles && t1[0] && t2[0] && gMap[t1[0]] && gMap[t2[0]]) {
-      const r = calcSingles(m.course_key, t1[0], t2[0], gMap, ghinOverrides, courseOverrides);
+      const r = calcSingles(m.course_key, t1[0], t2[0], gMap, ghinOverrides, courseOverrides, mh);
       team1 += r.rcPoints[t1[0]] || 0;
       team2 += r.rcPoints[t2[0]] || 0;
       [t1[0], t2[0]].forEach(id => { mvpPoints[id] += r.rcPoints[id] || 0; });
     } else if (!isSingles && t1.length === 2 && t2.length === 2 && (t1.some(id => gMap[id]) || t2.some(id => gMap[id]))) {
-      const r = calcBestBall(m.course_key, t1, t2, gMap, ghinOverrides, courseOverrides);
+      const r = calcBestBall(m.course_key, t1, t2, gMap, ghinOverrides, courseOverrides, mh);
       team1 += r.rcPoints.team1;
       team2 += r.rcPoints.team2;
       // Best ball is a team result — split the point between the pair for MVP

@@ -70,7 +70,7 @@ export default function Admin({ onSave }) {
       const tpl = getMatchTemplate(matchupCourse);
       const all = await getMatchups();
       const forCourse = all.filter(m=>m.course_key===matchupCourse);
-      forCourse.forEach(m=>{ if(tpl[m.match_index]){tpl[m.match_index].team1=m.team1_players; tpl[m.match_index].team2=m.team2_players;} });
+      forCourse.forEach(m=>{ if(tpl[m.match_index]){tpl[m.match_index].team1=m.team1_players; tpl[m.match_index].team2=m.team2_players; tpl[m.match_index].mh=m.match_handicaps||{};} });
       setMatches(tpl); setMatchSaved(false);
     }
     loadMatchups();
@@ -90,8 +90,18 @@ export default function Admin({ onSave }) {
   }
 
   async function handleMatchSave() {
-    for (const m of matches) await saveMatchup(matchupCourse, m.index, m.team1, m.team2);
+    for (const m of matches) await saveMatchup(matchupCourse, m.index, m.team1, m.team2, m.mh||{});
     setMatchSaved(true); onSave?.();
+  }
+
+  function setMatchOverride(matchIdx, playerId, val) {
+    setMatches(prev=>prev.map((m,i)=>{
+      if(i!==matchIdx) return m;
+      const mh={...(m.mh||{})};
+      if(val===""||val==null) delete mh[playerId]; else mh[playerId]=Number(val);
+      return {...m,mh};
+    }));
+    setMatchSaved(false);
   }
 
   function togglePlayerTeam(playerId, toTeam) {
@@ -289,6 +299,37 @@ export default function Admin({ onSave }) {
                         ))}
                       </div>
                     </div>
+                    {/* Match handicaps — auto (play to low man), with override */}
+                    {(() => {
+                      const ids=[...(m.team1||[]),...(m.team2||[])].filter(Boolean);
+                      if(ids.length<2) return null;
+                      const chs=Object.fromEntries(ids.map(id=>[id,chFor(id)]));
+                      const low=Math.min(...ids.map(id=>chs[id]));
+                      return (
+                        <div style={{borderTop:"1px solid var(--gray-200)",padding:"0.6rem 0.75rem",background:"var(--gray-100)"}}>
+                          <div style={{fontSize:"0.62rem",fontWeight:700,color:"var(--gray-400)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"0.4rem"}}>
+                            Match Handicaps · low man plays scratch
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:"0.4rem"}}>
+                            {ids.map(id=>{
+                              const auto=chs[id]-low;
+                              const ov=m.mh?.[id];
+                              const hasOv=ov!==undefined&&ov!==""&&ov!==null;
+                              return (
+                                <div key={id} style={{display:"flex",alignItems:"center",gap:"0.4rem"}}>
+                                  <span style={{fontSize:"var(--text-xs)",fontWeight:600,minWidth:52}}>{PLAYERS.find(p=>p.id===id)?.name}</span>
+                                  <input type="number" className="form-input" style={{width:52,padding:"0.2rem 0.3rem",fontSize:"var(--text-xs)",
+                                    borderColor:hasOv?"var(--copper)":"var(--gray-200)"}}
+                                    value={hasOv?ov:""} placeholder={String(auto)}
+                                    onChange={e=>setMatchOverride(mi,id,e.target.value)} />
+                                  <span style={{fontSize:"0.6rem",color:"var(--gray-400)"}}>{hasOv?"✎":"auto"}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                     );
                   })}

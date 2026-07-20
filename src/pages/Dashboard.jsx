@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAppData } from "../lib/useAppData";
 import { COURSES, COURSE_KEYS, courseHandicap, PRIZES, PAST_WINNERS, TOURNAMENT } from "../lib/gameData";
 import PastChampions from "../components/PastChampions";
+import MatchScorecard from "../components/MatchScorecard";
 import { overallStandings, skinPayouts, dailyLowNet, calcBestBall, calcSingles, getRoundTotals, getDayPayouts, computeRyderCup, computePrizes } from "../lib/scoring";
 import { resolvePrizes } from "../lib/prizes";
 
@@ -21,6 +22,7 @@ export default function Dashboard({ onNavigate }) {
   const { rounds, matchups, ctpWinners, loading, ghinOverrides, roundsByCourse, grossByCoursePlayer, teams, players, courses, settings } = useAppData();
   const [sortBy, setSortBy] = useState("net");
   const [resultsTab, setResultsTab] = useState(null); // null = overview, else courseKey
+  const [expandedMatches, setExpandedMatches] = useState({}); // keyed by "ck-mi"
 
   if (loading) return <div className="spinner"/>;
 
@@ -246,6 +248,32 @@ export default function Dashboard({ onNavigate }) {
                                 <span style={{color:"var(--blue)",fontWeight:600}}>{teams[2].name} {res.holeWins.team2}</span>
                               </div>
                             )}
+                            {/* Full match scorecard toggle — where you actually check strokes and validate scores */}
+                            {(() => {
+                              const key = `${ck}-${mi}`;
+                              const isOpen = !!expandedMatches[key];
+                              return (
+                                <>
+                                  <button className="btn btn-ghost btn-sm" style={{marginTop:"0.6rem"}}
+                                    onClick={()=>setExpandedMatches(prev=>({...prev,[key]:!prev[key]}))}>
+                                    {isOpen ? "Hide scorecard" : "Show scorecard"}
+                                  </button>
+                                  {isOpen && (
+                                    <MatchScorecard
+                                      course={course}
+                                      courseKey={ck}
+                                      match={m}
+                                      roundsMap={gMap}
+                                      players={players}
+                                      teams={teams}
+                                      ghinOverrides={ghinOverrides}
+                                      courseOverrides={courses}
+                                      isSingles={isSingles}
+                                    />
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>

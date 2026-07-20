@@ -10,8 +10,8 @@ export const COURSES = {
   bearDance: {
     name: "Bear Dance",
     day: "Thursday",
-    tees: "Blue",
-    rating: 70.7,
+    tees: "Blue/White",
+    rating: 69.2,
     slope: 132,
     par: [4,3,4,4,5,4,3,5,4, 4,4,3,5,4,4,4,3,5],
     hdcp:[3,17,13,11,7,15,9,5,1, 14,6,16,8,12,4,10,18,2],

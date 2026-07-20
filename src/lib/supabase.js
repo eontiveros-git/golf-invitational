@@ -38,10 +38,10 @@ export async function getMatchups() {
   const { data } = await supabase.from("matchups").select("*");
   return data || [];
 }
-export async function saveMatchup(courseKey, matchIndex, team1Players, team2Players) {
+export async function saveMatchup(courseKey, matchIndex, team1Players, team2Players, matchHandicaps = {}) {
   const { data } = await supabase
     .from("matchups")
-    .upsert({ course_key: courseKey, match_index: matchIndex, team1_players: team1Players, team2_players: team2Players },
+    .upsert({ course_key: courseKey, match_index: matchIndex, team1_players: team1Players, team2_players: team2Players, match_handicaps: matchHandicaps },
              { onConflict: "course_key,match_index" })
     .select().single();
   return data;

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { COURSES as DEFAULT_COURSES, COURSE_KEYS, courseHandicap, strokesPerHole } from "../lib/gameData";
 import { getRounds, saveRound, deleteRound, getSettings, getCtpWinners, saveCtpWinner } from "../lib/supabase";
-import { getRoundTotals } from "../lib/scoring";
+import { getRoundTotals, matchHandicaps } from "../lib/scoring";
 import { useAppData } from "../lib/useAppData";
 import { ConfirmDialog, Toast } from "../components/Confirm";
 
@@ -18,7 +18,7 @@ function scoreClass(score, par) {
 const NUMPAD = [1,2,3,4,5,6,7,8,9,10,11,12];
 
 export default function ScoreEntry({ onSave }) {
-  const { players, ghinOverrides: appGhinOverrides, courses } = useAppData();
+  const { players, ghinOverrides: appGhinOverrides, courses, matchups } = useAppData();
   const [courseKey, setCourseKey] = useState("bearDance");
   const [scores, setScores]   = useState({});
   const [saved, setSaved]     = useState({});
@@ -468,6 +468,52 @@ export default function ScoreEntry({ onSave }) {
           </table>
         </div>
       </div>
+      {/* ── MATCH HANDICAPS ── */}
+      {(() => {
+        const courseMatches = (matchups||[]).filter(m=>m.course_key===courseKey)
+          .sort((a,b)=>a.match_index-b.match_index);
+        if (!courseMatches.length) return null;
+        const pName = id => players.find(p=>p.id===id)?.name ?? id;
+        return (
+          <div className="card">
+            <div className="card-header">
+              <h2>Match Handicaps</h2>
+              <span className="badge">{course.name} · low man scratch</span>
+            </div>
+            <div className="card-body" style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
+              {courseMatches.map((m,mi)=>{
+                const ids=[...(m.team1_players||[]),...(m.team2_players||[])].filter(Boolean);
+                if(ids.length<2) return null;
+                const { fullCH, matchH, low } = matchHandicaps(courseKey, ids, ghinOverrides, courses, m.match_handicaps||{});
+                const row = side => (side||[]).filter(Boolean).map(id=>{
+                  const isOv = m.match_handicaps?.[id]!==undefined && m.match_handicaps?.[id]!=="" && m.match_handicaps?.[id]!==null;
+                  return (
+                    <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:"0.5rem",padding:"0.15rem 0"}}>
+                      <span style={{fontWeight:600,fontSize:"var(--text-sm)"}}>{pName(id)}</span>
+                      <span style={{fontSize:"var(--text-xs)",color:"var(--gray-400)"}}>
+                        CH {fullCH[id]} → <span style={{fontFamily:"var(--font-mono)",fontWeight:700,fontSize:"var(--text-base)",color:matchH[id]===0?"var(--pine-mid)":"var(--gray-800)"}}>{matchH[id]===0?"scr":`+${matchH[id]}`}</span>
+                        {isOv && <span title="manual override" style={{marginLeft:3,color:"var(--copper)"}}>✎</span>}
+                      </span>
+                    </div>
+                  );
+                });
+                return (
+                  <div key={mi} style={{border:"1px solid var(--gray-200)",borderRadius:5,overflow:"hidden"}}>
+                    <div style={{background:"var(--gray-100)",padding:"0.3rem 0.6rem",fontSize:"0.62rem",fontWeight:700,color:"var(--gray-600)",textTransform:"uppercase",letterSpacing:"0.06em"}}>
+                      Match {m.match_index+1}
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.5rem",padding:"0.5rem 0.6rem"}}>
+                      <div>{row(m.team1_players)}</div>
+                      <div style={{borderLeft:"1px solid var(--gray-200)",paddingLeft:"0.5rem"}}>{row(m.team2_players)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── CTP ── */}
       {(() => {
         const par3Holes = course.par.map((p,i)=>({p,i})).filter(x=>x.p===3);

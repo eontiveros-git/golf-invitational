@@ -21,3 +21,6 @@ CREATE TABLE IF NOT EXISTS daily_payments (
 );
 ALTER TABLE daily_payments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "allow all" ON daily_payments FOR ALL USING (true) WITH CHECK (true);
+
+-- Match-play handicap overrides (per matchup): { playerId: strokes }
+ALTER TABLE matchups ADD COLUMN IF NOT EXISTS match_handicaps JSONB DEFAULT '{}'::jsonb;

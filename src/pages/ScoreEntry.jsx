@@ -18,8 +18,19 @@ function scoreClass(score, par) {
 const NUMPAD = [1,2,3,4,5,6,7,8,9,10,11,12];
 
 export default function ScoreEntry({ onSave }) {
-  const { players, ghinOverrides: appGhinOverrides, courses, matchups } = useAppData();
-  const [courseKey, setCourseKey] = useState("bearDance");
+  const { players, ghinOverrides: appGhinOverrides, courses, matchups, teams } = useAppData();
+
+  // Default to the next day that still has scores to enter.
+  // Once all 12 rounds are in for a course, the dropdown advances to the next.
+  // Computed once on mount so it doesn't jump while the user is actively entering.
+  const [courseKey, setCourseKey] = useState(() => {
+    try {
+      // We don't have rounds in scope here yet, so fall back to bearDance;
+      // the useEffect below promotes it after the initial load.
+      return "bearDance";
+    } catch { return "bearDance"; }
+  });
+  const [initialAdvanceDone, setInitialAdvanceDone] = useState(false);
   const [scores, setScores]   = useState({});
   const [saved, setSaved]     = useState({});
   const [saving, setSaving]   = useState(null);
@@ -31,6 +42,8 @@ export default function ScoreEntry({ onSave }) {
   const [ctpWinners, setCtpWinners] = useState([]);
   const [confirmDelete, setConfirmDelete] = useState(null); // playerId pending removal
   const [toast, setToast] = useState("");
+  const [matchIdx, setMatchIdx] = useState(0);     // which match is active in match mode
+  const [matchPlayerIdx, setMatchPlayerIdx] = useState(0); // which of the 4 players is currently receiving input
   const saveTimer = useRef(null);
 
   const course = (courses && courses[courseKey]) || DEFAULT_COURSES[courseKey];
@@ -42,6 +55,27 @@ export default function ScoreEntry({ onSave }) {
   useEffect(() => {
     async function load() {
       const [allRounds, s, allCtp] = await Promise.all([getRounds(), getSettings(), getCtpWinners()]);
+
+      // ── On first load only: promote to the next unfinished day.
+      // "Finished" = 12 completed rounds saved for that course.
+      // After the user manually picks a course, we respect their choice.
+      if (!initialAdvanceDone) {
+        const target = COURSE_KEYS.find(ck => {
+          const count = allRounds.filter(r =>
+            r.course_key === ck &&
+            Array.isArray(r.gross_scores) &&
+            r.gross_scores.length === 18 &&
+            r.gross_scores.every(v => v != null && !isNaN(v))
+          ).length;
+          return count < 12;
+        }) || COURSE_KEYS[COURSE_KEYS.length - 1]; // all four done → last day
+        setInitialAdvanceDone(true);
+        if (target !== courseKey) {
+          setCourseKey(target);
+          return; // effect will re-run with the new key; skip loading data for the old one
+        }
+      }
+
       const courseRounds = allRounds.filter(r => r.course_key === courseKey);
       const loaded = {};
       const savedMap = {};
@@ -168,12 +202,15 @@ export default function ScoreEntry({ onSave }) {
               </span>
             </div>
           </div>
-          <div style={{display:"flex",gap:"0.4rem"}}>
+          <div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap"}}>
             <button className={`btn btn-sm${mode==="quick"?" btn-primary":" btn-ghost"}`} onClick={()=>setMode("quick")}>
               ⚡ Quick Entry
             </button>
             <button className={`btn btn-sm${mode==="full"?" btn-primary":" btn-ghost"}`} onClick={()=>setMode("full")}>
               📋 Full Scorecard
+            </button>
+            <button className={`btn btn-sm${mode==="match"?" btn-primary":" btn-ghost"}`} onClick={()=>setMode("match")}>
+              ⛳ Match Mode
             </button>
           </div>
         </div>
@@ -183,40 +220,44 @@ export default function ScoreEntry({ onSave }) {
       <div className="card mb-2">
         <div className="card-header"><h2>{course.name}</h2></div>
         <div className="card-body">
-          <div style={{display:"flex",flexWrap:"wrap",gap:"0.4rem",marginBottom:"1rem"}}>
-            {players.map(p => {
-              const isSaved = saved[p.id];
-              const isActive = p.id === activePlayer;
-              const count = (scores[p.id]||[]).filter(v=>v!==null&&v!==undefined&&!isNaN(v)).length;
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => { setActivePlayer(p.id); setActiveHole(0); }}
-                  className="btn btn-sm"
-                  style={{
-                    background: isActive ? "var(--green-mid)" : isSaved ? "#e8f5ee" : count>0 ? "#fff9e6" : "var(--gray-100)",
-                    color: isActive ? "#fff" : isSaved ? "var(--green-mid)" : "var(--gray-800)",
-                    border: isActive ? "none" : `1px solid ${isSaved?"var(--green-mid)":count>0?"var(--gold)":"var(--gray-200)"}`,
-                    fontWeight: 600,
-                  }}
-                >
-                  {isSaved ? "✓ " : count>0 ? `${count}/18 ` : ""}{p.name}
-                </button>
-              );
-            })}
-          </div>
+          {mode !== "match" && (
+            <>
+              <div style={{display:"flex",flexWrap:"wrap",gap:"0.4rem",marginBottom:"1rem"}}>
+                {players.map(p => {
+                  const isSaved = saved[p.id];
+                  const isActive = p.id === activePlayer;
+                  const count = (scores[p.id]||[]).filter(v=>v!==null&&v!==undefined&&!isNaN(v)).length;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => { setActivePlayer(p.id); setActiveHole(0); }}
+                      className="btn btn-sm"
+                      style={{
+                        background: isActive ? "var(--green-mid)" : isSaved ? "#e8f5ee" : count>0 ? "#fff9e6" : "var(--gray-100)",
+                        color: isActive ? "#fff" : isSaved ? "var(--green-mid)" : "var(--gray-800)",
+                        border: isActive ? "none" : `1px solid ${isSaved?"var(--green-mid)":count>0?"var(--gold)":"var(--gray-200)"}`,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {isSaved ? "✓ " : count>0 ? `${count}/18 ` : ""}{p.name}
+                    </button>
+                  );
+                })}
+              </div>
 
-          <div style={{display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap",marginBottom:"0.75rem"}}>
-            <span style={{fontWeight:700,fontSize:"1rem"}}>{player.name}</span>
-            <span className={`tag tag-team${player.team}`}>CH {ch}</span>
-            {totals && (
-              <>
-                <span className="text-mono" style={{fontSize:"0.85rem"}}>Gross: <strong>{totals.gross}</strong></span>
-                <span className="text-mono" style={{fontSize:"0.85rem"}}>Net: <strong>{totals.net}</strong></span>
-              </>
-            )}
-            {flashSaved && <span style={{fontSize:"0.78rem",color:"var(--green-mid)",fontWeight:700}}>✓ Saved</span>}
-          </div>
+              <div style={{display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap",marginBottom:"0.75rem"}}>
+                <span style={{fontWeight:700,fontSize:"1rem"}}>{player.name}</span>
+                <span className={`tag tag-team${player.team}`}>CH {ch}</span>
+                {totals && (
+                  <>
+                    <span className="text-mono" style={{fontSize:"0.85rem"}}>Gross: <strong>{totals.gross}</strong></span>
+                    <span className="text-mono" style={{fontSize:"0.85rem"}}>Net: <strong>{totals.net}</strong></span>
+                  </>
+                )}
+                {flashSaved && <span style={{fontSize:"0.78rem",color:"var(--green-mid)",fontWeight:700}}>✓ Saved</span>}
+              </div>
+            </>
+          )}
 
           {/* ── QUICK MODE ── */}
           {mode === "quick" && (
@@ -325,6 +366,240 @@ export default function ScoreEntry({ onSave }) {
               )}
             </div>
           )}
+
+          {/* ── MATCH MODE — enter one hole for all 4 players in a match ── */}
+          {mode === "match" && (() => {
+            try {
+            const courseMatches = (matchups||[]).filter(m=>m.course_key===courseKey)
+              .sort((a,b)=>a.match_index-b.match_index);
+            if (!courseMatches.length) return (
+              <div style={{padding:"1rem",background:"var(--gray-100)",borderRadius:6,fontSize:"var(--text-sm)",color:"var(--gray-600)"}}>
+                No matchups set for {course.name} yet. Set them under Admin → Matchups.
+              </div>
+            );
+            const activeMatch = courseMatches[Math.min(matchIdx, courseMatches.length-1)];
+            const matchIds = [...(activeMatch.team1_players||[]),...(activeMatch.team2_players||[])].filter(Boolean);
+            if (!matchIds.length) return (
+              <div style={{padding:"1rem",background:"var(--gray-100)",borderRadius:6,fontSize:"var(--text-sm)",color:"var(--gray-600)"}}>
+                Match {activeMatch.match_index+1} has no players assigned yet.
+              </div>
+            );
+
+            const { fullCH, matchH } = matchHandicaps(courseKey, matchIds, ghinOverrides, courses, activeMatch.match_handicaps||{});
+            const nameOf = id => players.find(p=>p.id===id)?.name ?? id;
+            const cellFor = (pid, h) => {
+              const v = scores[pid]?.[h];
+              return v==null||isNaN(v) ? "" : String(v);
+            };
+
+            const setMatchScore = (pid, hole, val) => {
+              setScores(prev => {
+                const arr = prev[pid] ? [...prev[pid]] : new Array(18).fill(null);
+                arr[hole] = val;
+                clearTimeout(saveTimer.current);
+                saveTimer.current = setTimeout(()=>autoSave(pid, arr), 400);
+                return { ...prev, [pid]: arr };
+              });
+            };
+
+            const activePid = matchIds[Math.min(matchPlayerIdx, matchIds.length-1)];
+            const holeAllFilled = matchIds.every(pid => {
+              const v = scores[pid]?.[activeHole];
+              return v!=null && !isNaN(v);
+            });
+
+            const t1 = activeMatch.team1_players||[], t2 = activeMatch.team2_players||[];
+            const strokesById = Object.fromEntries(matchIds.map(id => [id, strokesPerHole(matchH[id], course.hdcp)]));
+
+            // Live match status computed only from holes that all 4 have entered
+            let margin = 0, played = 0;
+            for (let h=0; h<18; h++) {
+              const netsById = {};
+              matchIds.forEach(id => {
+                const g = scores[id]?.[h];
+                if (g==null || isNaN(g)) return;
+                netsById[id] = g - strokesById[id][h];
+              });
+              const t1Nets = t1.map(id => netsById[id]).filter(v => v!=null);
+              const t2Nets = t2.map(id => netsById[id]).filter(v => v!=null);
+              if (!t1Nets.length || !t2Nets.length) continue;
+              played = h+1;
+              const t1Best = Math.min(...t1Nets), t2Best = Math.min(...t2Nets);
+              if (t1Best < t2Best) margin += 1;
+              else if (t2Best < t1Best) margin -= 1;
+            }
+            const remaining = 18 - played;
+            const isFinal = played > 0 && Math.abs(margin) > remaining;
+            const statusLabel = played === 0 ? "—"
+              : margin === 0 ? `All Square thru ${played}`
+              : isFinal ? `${Math.abs(margin)} & ${remaining}`
+              : `${Math.abs(margin)} ${margin>0?"UP":"DN"} thru ${played}`;
+
+            return (
+              <div>
+                {/* Match picker */}
+                <div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap",marginBottom:"0.75rem"}}>
+                  {courseMatches.map((m,i) => (
+                    <button key={i}
+                      onClick={()=>{setMatchIdx(i); setMatchPlayerIdx(0);}}
+                      className={`btn btn-sm${matchIdx===i?" btn-primary":" btn-ghost"}`}>
+                      Match {m.match_index+1}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Live status banner */}
+                <div style={{
+                  padding:"0.6rem 0.9rem", borderRadius:6, marginBottom:"0.75rem",
+                  background:"var(--pine-deep)", color:"var(--aspen)",
+                  display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:"0.5rem",
+                }}>
+                  <div style={{fontSize:"var(--text-sm)"}}>
+                    <span style={{color:"var(--pine-light)"}}>{teams[1]?.name}</span>
+                    <span style={{margin:"0 0.4rem",color:"var(--gray-400)"}}>vs</span>
+                    <span style={{color:"var(--pine-light)"}}>{teams[2]?.name}</span>
+                  </div>
+                  <div style={{fontFamily:"var(--font-mono)",fontWeight:700,fontSize:"var(--text-base)",
+                    color: margin>0?"var(--pine-light)":margin<0?"var(--copper-light)":"var(--aspen)"}}>
+                    {statusLabel}
+                  </div>
+                </div>
+
+                {/* Hole picker strip — front 9 */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(9,1fr)",gap:"3px",marginBottom:"3px"}}>
+                  {Array.from({length:9},(_,i)=>{
+                    const done = matchIds.every(pid => scores[pid]?.[i] != null);
+                    const any  = matchIds.some(pid => scores[pid]?.[i] != null);
+                    return (
+                      <button key={i} onClick={()=>{setActiveHole(i); setMatchPlayerIdx(0);}}
+                        style={{
+                          aspectRatio:"1.4",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+                          borderRadius:5,cursor:"pointer",padding:"0.2rem 0",
+                          border: activeHole===i ? "3px solid var(--pine-mid)" : "1px solid var(--gray-200)",
+                          background: done ? "#e8f5ee" : any ? "#fff9e6" : "var(--white)",
+                        }}>
+                        <span style={{fontSize:"0.6rem",opacity:0.6,lineHeight:1}}>{i+1}</span>
+                        <span style={{fontSize:"0.65rem",fontWeight:600,color:"var(--gray-600)"}}>par {course.par[i]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Back 9 */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(9,1fr)",gap:"3px",marginBottom:"1rem"}}>
+                  {Array.from({length:9},(_,i)=>{
+                    const h = i+9;
+                    const done = matchIds.every(pid => scores[pid]?.[h] != null);
+                    const any  = matchIds.some(pid => scores[pid]?.[h] != null);
+                    return (
+                      <button key={h} onClick={()=>{setActiveHole(h); setMatchPlayerIdx(0);}}
+                        style={{
+                          aspectRatio:"1.4",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+                          borderRadius:5,cursor:"pointer",padding:"0.2rem 0",
+                          border: activeHole===h ? "3px solid var(--pine-mid)" : "1px solid var(--gray-200)",
+                          background: done ? "#e8f5ee" : any ? "#fff9e6" : "var(--white)",
+                        }}>
+                        <span style={{fontSize:"0.6rem",opacity:0.6,lineHeight:1}}>{h+1}</span>
+                        <span style={{fontSize:"0.65rem",fontWeight:600,color:"var(--gray-600)"}}>par {course.par[h]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Player rows for the current hole — the whole point of match mode */}
+                <div style={{
+                  border:"2px solid var(--copper)", borderRadius:6, padding:"0.75rem",
+                  marginBottom:"0.75rem", background:"#fefaf3",
+                }}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"0.5rem"}}>
+                    <div style={{fontWeight:700,fontSize:"var(--text-base)"}}>
+                      Hole {activeHole+1} · Par {course.par[activeHole]}
+                    </div>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--gray-600)"}}>
+                      Hdcp {course.hdcp[activeHole]}
+                    </div>
+                  </div>
+
+                  {matchIds.map((pid, pi) => {
+                    const team = t1.includes(pid) ? 1 : 2;
+                    const isActive = pi === matchPlayerIdx;
+                    const val = cellFor(pid, activeHole);
+                    const s = strokesById[pid][activeHole] || 0;
+                    return (
+                      <div key={pid}
+                        onClick={()=>setMatchPlayerIdx(pi)}
+                        style={{
+                          display:"flex", alignItems:"center", gap:"0.75rem",
+                          padding:"0.55rem 0.6rem", marginBottom:"0.3rem",
+                          borderRadius:5, cursor:"pointer",
+                          border: isActive ? "2px solid var(--pine-mid)" : "1px solid var(--gray-200)",
+                          background: isActive ? "#f0f7f3" : "var(--white)",
+                        }}>
+                        <span className={`match-band match-band-t${team}`} style={{height:"1.2em",width:4}}/>
+                        <div style={{flex:1}}>
+                          <span style={{fontWeight:700,fontSize:"var(--text-sm)"}}>{nameOf(pid)}</span>
+                          <span style={{fontSize:"var(--text-xs)",color:"var(--gray-400)",marginLeft:6}}>
+                            +{matchH[pid]}{s>0?<span style={{color:"var(--copper)"}}>{" ●".repeat(s)}</span>:null}
+                          </span>
+                        </div>
+                        <span style={{fontFamily:"var(--font-mono)",fontSize:"1.4rem",fontWeight:700,minWidth:32,textAlign:"right",
+                          color: val==="" ? "var(--gray-300)" : "var(--gray-800)"}}>
+                          {val==="" ? "·" : val}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Numpad — entering fills active player then jumps to next unfilled */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:"0.35rem"}}>
+                  {NUMPAD.map(n => (
+                    <button key={n} className="btn"
+                      onClick={()=>{
+                        setMatchScore(activePid, activeHole, n);
+                        // find next player on this hole who's still empty (respecting order after current)
+                        const nextEmpty = matchIds.findIndex((id,i) =>
+                          i > matchPlayerIdx && (scores[id]?.[activeHole]==null || id===activePid && false)
+                        );
+                        // simpler: just advance one player
+                        const nextIdx = matchPlayerIdx < matchIds.length-1 ? matchPlayerIdx+1 : matchPlayerIdx;
+                        setMatchPlayerIdx(nextIdx);
+                        // Advance hole if this entry completed the hole for everyone
+                        const willAllFill = matchIds.every(id => id===activePid ? true : (scores[id]?.[activeHole]!=null));
+                        if (willAllFill && activeHole<17) {
+                          setTimeout(()=>{setActiveHole(activeHole+1); setMatchPlayerIdx(0);}, 250);
+                        }
+                      }}
+                      style={{padding:"0.9rem 0",fontSize:"1.2rem",fontWeight:700}}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:"0.4rem",marginTop:"0.5rem"}}>
+                  <button className="btn btn-ghost btn-sm" style={{flex:1}}
+                    onClick={()=>setMatchScore(activePid, activeHole, null)}>Clear</button>
+                  <button className="btn btn-ghost btn-sm" style={{flex:1}}
+                    onClick={()=>{if(activeHole>0){setActiveHole(activeHole-1);setMatchPlayerIdx(0);}}}>← Hole</button>
+                  <button className="btn btn-ghost btn-sm" style={{flex:1}}
+                    onClick={()=>{if(activeHole<17){setActiveHole(activeHole+1);setMatchPlayerIdx(0);}}}>Hole →</button>
+                </div>
+
+                {holeAllFilled && activeHole===17 && (
+                  <div style={{marginTop:"0.75rem",padding:"0.6rem",background:"#e8f5ee",borderRadius:6,textAlign:"center",fontWeight:600,color:"var(--pine-deep)"}}>
+                    ✓ All 4 players complete through 18. Auto-saved.
+                  </div>
+                )}
+              </div>
+            );
+            } catch (err) {
+              return (
+                <div style={{padding:"1rem",background:"#fee2e2",borderRadius:6,fontSize:"var(--text-sm)",color:"var(--red)"}}>
+                  <div style={{fontWeight:700,marginBottom:"0.4rem"}}>Match Mode couldn't load.</div>
+                  <div style={{fontFamily:"var(--font-mono)",fontSize:"var(--text-xs)"}}>{String(err?.message||err)}</div>
+                  <div style={{marginTop:"0.5rem"}}>Try Quick Entry or Full Scorecard while I debug.</div>
+                </div>
+              );
+            }
+          })()}
 
           {/* ── FULL SCORECARD MODE ── */}
           {mode === "full" && (
@@ -534,8 +809,9 @@ export default function ScoreEntry({ onSave }) {
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:"0.5rem"}}>
                 {par3Holes.map(({i})=>{
                   const current = ctpWinners.find(c=>c.course_key===courseKey&&c.hole_index===i);
+                  const winner = current?.player_id ? players.find(p=>p.id===current.player_id) : null;
                   return (
-                    <div key={i} style={{border:`1px solid ${current?"var(--copper)":"var(--gray-200)"}`,borderRadius:5,padding:"0.6rem 0.75rem",background:current?"var(--copper-pale)":""}}>
+                    <div key={i} style={{border:`1px solid ${winner?"var(--copper)":"var(--gray-200)"}`,borderRadius:5,padding:"0.6rem 0.75rem",background:winner?"var(--copper-pale)":""}}>
                       <div className="form-label" style={{marginBottom:"0.3rem"}}>Hole {i+1} · Par 3</div>
                       <select className="form-select" style={{width:"100%"}}
                         value={current?.player_id||""}
@@ -543,9 +819,9 @@ export default function ScoreEntry({ onSave }) {
                         <option value="">— No winner yet —</option>
                         {players.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
-                      {current && (
+                      {winner && (
                         <div style={{marginTop:"0.3rem",fontSize:"var(--text-xs)",color:"var(--copper)",fontWeight:600}}>
-                          🏆 {players.find(p=>p.id===current.player_id)?.name}
+                          🏆 {winner.name}
                         </div>
                       )}
                     </div>

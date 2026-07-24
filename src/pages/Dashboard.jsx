@@ -19,7 +19,7 @@ function fmtMoney(n) {
 }
 
 export default function Dashboard({ onNavigate }) {
-  const { rounds, matchups, ctpWinners, loading, ghinOverrides, roundsByCourse, grossByCoursePlayer, teams, players, courses, settings } = useAppData();
+  const { rounds, matchups, ctpWinners, loading, ghinOverrides, roundsByCourse, grossByCoursePlayer, teams, players, courses, settings, dailyPayments } = useAppData();
   const [sortBy, setSortBy] = useState("net");
   const [resultsTab, setResultsTab] = useState(null); // null = overview, else courseKey
   const [expandedMatches, setExpandedMatches] = useState({}); // keyed by "ck-mi"
@@ -39,16 +39,32 @@ export default function Dashboard({ onNavigate }) {
   const mvpPlayers = rc.mvpWinners.map(id => players.find(p => p.id === id)).filter(Boolean);
 
   // ── Money — gross cash paid out nightly ──────────────────────────────────────
+  // ── Money — for each course, use what was actually PAID if payments exist,
+  // otherwise fall back to computed. This keeps historical days (like Bear
+  // Dance, which was settled at the cabin with the old tie logic) showing the
+  // dollars people actually received rather than recomputing after a bugfix.
   const dailyMoney = {};
   players.forEach(p=>{dailyMoney[p.id]={total:0};COURSE_KEYS.forEach(ck=>{dailyMoney[p.id][ck]=0;});});
+  const settledCourses = new Set(); // courses where we're using paid amounts
   COURSE_KEYS.forEach(ck=>{
-    // Same helper the Settlement page uses — gross cash paid out that night
-    const dp = getDayPayouts(ck, roundsByCourse, ctpWinners, ghinOverrides, courses);
-    Object.entries(dp).forEach(([pid, d]) => {
-      if (!dailyMoney[pid]) return;
-      dailyMoney[pid][ck] += d.total;
-      dailyMoney[pid].total += d.total;
-    });
+    const coursePaid = (dailyPayments||[]).filter(p => p.course_key === ck && p.paid);
+    if (coursePaid.length > 0) {
+      // Trust the record of what was handed out at the cabin
+      settledCourses.add(ck);
+      coursePaid.forEach(p => {
+        if (!dailyMoney[p.to_player]) return;
+        dailyMoney[p.to_player][ck] += Number(p.amount) || 0;
+        dailyMoney[p.to_player].total += Number(p.amount) || 0;
+      });
+    } else {
+      // No payments recorded yet — show the projected payouts from the current formula
+      const dp = getDayPayouts(ck, roundsByCourse, ctpWinners, ghinOverrides, courses);
+      Object.entries(dp).forEach(([pid, d]) => {
+        if (!dailyMoney[pid]) return;
+        dailyMoney[pid][ck] += d.total;
+        dailyMoney[pid].total += d.total;
+      });
+    }
   });
 
   // ── Overall standings ──────────────────────────────────────────────────
@@ -182,7 +198,8 @@ export default function Dashboard({ onNavigate }) {
                   <div className="card-body">
                     <div className="ctp-grid">
                       {par3Holes.map(({i})=>{
-                        const winner=courseCtp.find(c=>c.hole_index===i);
+                        const row = courseCtp.find(c=>c.hole_index===i);
+                        const winner = row?.player_id ? row : null;
                         return(
                           <div key={i} className={`ctp-item${winner?" won":""}`}>
                             <div className="ctp-label">Hole {i+1}</div>
@@ -353,12 +370,22 @@ export default function Dashboard({ onNavigate }) {
 
         {/* Money */}
         <div className="card">
-          <div className="card-header"><h2>Money Won</h2><span className="badge">Skins + LN + CTP</span></div>
+          <div className="card-header">
+            <h2>Money Won</h2>
+            <span className="badge">Skins + LN + CTP</span>
+          </div>
           <div className="card-body" style={{padding:0,overflowX:"auto"}}>
             <table className="leaderboard" style={{minWidth:360}}>
               <thead><tr>
                 <th>Player</th>
-                {roundsPlayed.map(ck=><th key={ck} style={{textAlign:"center"}}>{COURSES[ck].day.slice(0,3)}</th>)}
+                {roundsPlayed.map(ck=>(
+                  <th key={ck} style={{textAlign:"center"}}>
+                    {COURSES[ck].day.slice(0,3)}
+                    {settledCourses.has(ck) && (
+                      <span title="Actual amounts paid at the cabin" style={{marginLeft:4,fontSize:"0.6rem",color:"var(--copper)"}}>✓</span>
+                    )}
+                  </th>
+                ))}
                 <th style={{textAlign:"right"}}>Total</th>
               </tr></thead>
               <tbody>
@@ -383,7 +410,7 @@ export default function Dashboard({ onNavigate }) {
             </table>
           </div>
           <div style={{padding:"0.5rem 1rem",background:"var(--gray-100)",fontSize:"var(--text-xs)",color:"var(--gray-600)",borderTop:"1px solid var(--gray-200)"}}>
-            Cash paid out each night. Ryder Cup and MVP settle Sunday.
+            <span style={{color:"var(--copper)"}}>✓</span> paid out at the cabin · other days show projected. Ryder Cup and MVP settle Sunday.
           </div>
         </div>
       </div>
@@ -417,24 +444,28 @@ export default function Dashboard({ onNavigate }) {
       </div>
 
       {/* CTP */}
-      {ctpWinners.length>0&&(
-        <div className="card mb-3">
-          <div className="card-header"><h2>Closest to Pin</h2></div>
-          <div className="card-body">
-            <div className="ctp-grid">
-              {ctpWinners.map(c=>{
-                const p=players.find(x=>x.id===c.player_id);
-                return(
-                  <div key={`${c.course_key}-${c.hole_index}`} className="ctp-item won">
-                    <div className="ctp-label">{COURSES[c.course_key].name} · Hole {c.hole_index+1}</div>
-                    <div className="ctp-winner">🏆 {p?.name}</div>
-                  </div>
-                );
-              })}
+      {(() => {
+        const settled = ctpWinners.filter(c => c.player_id);
+        if (!settled.length) return null;
+        return (
+          <div className="card mb-3">
+            <div className="card-header"><h2>Closest to Pin</h2></div>
+            <div className="card-body">
+              <div className="ctp-grid">
+                {settled.map(c=>{
+                  const p=players.find(x=>x.id===c.player_id);
+                  return(
+                    <div key={`${c.course_key}-${c.hole_index}`} className="ctp-item won">
+                      <div className="ctp-label">{COURSES[c.course_key].name} · Hole {c.hole_index+1}</div>
+                      <div className="ctp-winner">🏆 {p?.name}</div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Champions — trophy case, computed from the scores */}
       {(() => {

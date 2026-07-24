@@ -79,30 +79,43 @@ export function dailyLowNet(courseKey, roundsForCourse, ghinOverrides = {}, cour
   const ranked = roundsForCourse
     .map(r => {
       const t = getRoundTotals(courseKey, r.playerId, r.grossScores, ghinOverrides, courseOverrides);
-      return { playerId: r.playerId, net: t.net };
+      const gross = r.grossScores.reduce((a,b)=>(a||0)+(b||0), 0);
+      return { playerId: r.playerId, net: t.net, gross };
     })
-    .sort((a,b) => a.net - b.net);
+    .sort((a,b) => a.net - b.net || a.gross - b.gross); // net first, gross breaks the tie for "earliest odd dollar"
 
   if (ranked.length === 0) return { first:[], second:[], payouts:{}, netPayouts:{} };
+
   const firstNet = ranked[0].net;
   const first = ranked.filter(r => r.net === firstNet);
   const remaining = ranked.filter(r => r.net !== firstNet);
   const secondNet = remaining[0]?.net;
   const second = secondNet !== undefined ? remaining.filter(r => r.net === secondNet) : [];
 
-  // $10/player pot = $120 total. Split: $80 first, $40 second
-  const buyIn = 10; // per player per day
+  // Pot structure: $10/player = $120 total per day, split $80 first + $40 second.
+  // Ties: if two (or more) tie for 1st, they occupy 1st AND 2nd, so they share
+  //       the combined $120 pot ($60 each for a 2-way tie). This was the bug
+  //       reported after the trip — the old logic paid $40 each and left $40
+  //       going to whoever "would have been" 2nd, which is wrong: nobody is 2nd
+  //       when 1st is tied by multiple players.
+  //       For a 2nd-place tie, those players share the $40 evenly.
+  const buyIn = 10;
   const firstPrize = 80;
   const secondPrize = 40;
 
-  // Ties split their prize; odd dollars go to the lower gross score first
-  const { payouts: firstPay }  = splitPot(firstPrize,  first.map(r => r.playerId));
-  const { payouts: secondPay } = splitPot(secondPrize, second.map(r => r.playerId));
+  let firstPay, secondPay;
+  if (first.length > 1) {
+    // 1st-place tie consumes both prize levels
+    firstPay = splitPot(firstPrize + secondPrize, first.map(r => r.playerId)).payouts;
+    secondPay = {};
+  } else {
+    firstPay  = splitPot(firstPrize,  first.map(r => r.playerId)).payouts;
+    secondPay = splitPot(secondPrize, second.map(r => r.playerId)).payouts;
+  }
 
   const grossPayouts = {};
   PLAYERS.forEach(p => (grossPayouts[p.id] = (firstPay[p.id] || 0) + (secondPay[p.id] || 0)));
 
-  // Net = gross collected − own buy-in
   const netPayouts = {};
   PLAYERS.forEach(p => (netPayouts[p.id] = 0));
   roundsForCourse.forEach(r => {
